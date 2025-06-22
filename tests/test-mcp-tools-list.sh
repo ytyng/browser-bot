@@ -22,7 +22,7 @@ cd $(dirname $0)/../
 
     # 6. レスポンス待機
     sleep 2
-} | ./launch.sh | {
+} | ./launch-mcp-server.sh | {
     initialize_received=false
     while IFS= read -r line; do
         # 初期化レスポンスを受信したらフラグを立てる

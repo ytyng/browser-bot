@@ -21,6 +21,8 @@ from pydantic import Field
 
 from browser_bot import logger, run_task, setup_logger_for_mcp_server
 
+setup_logger_for_mcp_server()
+
 # .envファイルから環境変数を読み込む
 load_dotenv()
 
