@@ -8,7 +8,6 @@ import sys
 import dotenv
 import httpx
 from browser_use import Agent, BrowserSession
-from langchain_openai import ChatOpenAI
 
 # browser_use をインポートする前にログ設定を行う
 os.environ['BROWSER_USE_LOGGING_LEVEL'] = 'result'
@@ -50,6 +49,24 @@ def setup_logger_for_mcp_server():
         _logger.addHandler(file_handler)
         _logger.setLevel(log_level)
         _logger.propagate = False
+
+
+def get_llm():
+
+    _llm_model_name = os.getenv('BROWSER_USE_LLM_MODEL', None)
+    if _llm_model_name.startswith('gemini'):
+        # Google Gemini
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(model=_llm_model_name, temperature=0.0)
+
+    # default: OpenAI
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=_llm_model_name or "gpt-4.1-mini",
+        temperature=0.0,
+    )
 
 
 async def run_task(*, task: str, max_steps: int = 7):
@@ -95,7 +112,7 @@ async def run_task(*, task: str, max_steps: int = 7):
     # Agent を作成
     agent = Agent(
         task=task,
-        llm=ChatOpenAI(model="gpt-4.1-mini"),
+        llm=get_llm(),
         browser_session=browser_session,
     )
 

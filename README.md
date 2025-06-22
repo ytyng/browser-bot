@@ -20,10 +20,26 @@ uv sync
 
 ### 2. 環境変数の設定
 
-`.env` ファイルを作成し、以下を設定：
+`.env` ファイルを作成し、以下を設定する
+
+#### OpenAI gpt-4.1-mini を使う場合
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
+```
+
+#### OpenAI その他のモデルを使う場合
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+BROWSER_USE_LLM_MODEL=your_model_name_here
+```
+
+#### Google Gemini 2.5 Flash を使う場合
+
+```env
+GOOGLE_API_KEY=your_google_api_key_here
+BROWSER_USE_LLM_MODEL=gemini-2.5-flash
 ```
 
 ### 3. Chrome の起動
