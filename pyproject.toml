@@ -1,0 +1,14 @@
+[project]
+name = "cyberneura-id-svelte-testbot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "browser-use>=0.3.1",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.1.0",
+]
+[project.optional-dependencies]
+# uv sync --extra test
+test = []
