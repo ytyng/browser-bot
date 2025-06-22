@@ -13,13 +13,13 @@ BrowserUse を使用する MCP サーバーの実装
 
 import os
 import sys
-import logging
-from typing import Any, Dict, List, Optional, Annotated
+from typing import Annotated
 
+import fastmcp
 from dotenv import load_dotenv
 from pydantic import Field
-import fastmcp
-from browser_bot import run_task, logger
+
+from browser_bot import logger, run_task, setup_logger_for_mcp_server
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -77,8 +77,10 @@ async def browser_use_local_chrome_9222_tool(
                 "4. 複数の操作は箇条書きで順序立てて記述\n"
                 "\n"
                 "良い例:\n"
-                "- 'https://www.google.com を開いて、検索ボックスに Python tutorial と入力し、検索ボタンをクリックしてください'\n"
-                "- '現在のページで、ログインフォームのユーザー名欄に admin、パスワード欄に password123 を入力して、ログインボタンをクリックしてください'\n"
+                "- 'https://www.google.com を開いて、検索ボックスに Python tutorial と"
+                "入力し、検索ボタンをクリックしてください'\n"
+                "- '現在のページで、ログインフォームのユーザー名欄に admin、"
+                "パスワード欄に password123 を入力して、ログインボタンをクリックしてください'\n"
                 "\n"
                 "悪い例:\n"
                 "- 'ログインして' (具体的な情報が不足)\n"
@@ -87,12 +89,44 @@ async def browser_use_local_chrome_9222_tool(
             min_length=10,
             max_length=4000,
             examples=[
-                "https://github.com を開いて、Search or jump to... と書かれた検索ボックスに fastmcp と入力してください",
-                "現在のページで、お問い合わせフォームの名前欄に '山田太郎'、メールアドレス欄に 'yamada@example.com'、メッセージ欄に 'テストメッセージです' と入力して、送信ボタンをクリックしてください",
-                "https://www.amazon.co.jp を開いて、検索ボックスに 'Python プログラミング' と入力し、検索を実行してください。その後、最初の検索結果をクリックしてください",
+                (
+                    "https://github.com を開いて、Search or jump to... と"
+                    "書かれた検索ボックスに fastmcp と入力してください"
+                ),
+                (
+                    "現在のページで、お問い合わせフォームの名前欄に '山田太郎'、"
+                    "メールアドレス欄に 'yamada@example.com'、"
+                    "メッセージ欄に 'テストメッセージです' と入力して、"
+                    "送信ボタンをクリックしてください"
+                ),
+                (
+                    "https://www.amazon.co.jp を開いて、"
+                    "検索ボックスに 'Python プログラミング' と入力し、"
+                    "検索を実行してください。"
+                    "その後、最初の検索結果をクリックしてください"
+                ),
             ],
         ),
     ],
+    max_steps: Annotated[
+        int,
+        Field(
+            description=(
+                "ブラウザ操作の最大実行ステップ数。"
+                "複雑なタスクほど多くのステップが必要になります。"
+                "\n\n"
+                "目安:\n"
+                "- 簡単な操作（1つのページで完結）: 3-5ステップ\n"
+                "- 中程度の操作（複数のページにわたる）: 5-10ステップ\n"
+                "- 複雑な操作（検索、フォーム入力、複数画面）: 10-15ステップ\n"
+                "\n"
+                "注意: 多すぎると時間がかかり、少なすぎるとタスクが完了しない可能性があります。"
+            ),
+            ge=1,
+            le=30,
+            examples=[3, 7, 15],
+        ),
+    ] = 7,
 ) -> str:
     """ブラウザ操作タスクを実行する"""
     if not task_text or not task_text.strip():
@@ -100,10 +134,12 @@ async def browser_use_local_chrome_9222_tool(
         logger.error(error_msg)
         return error_msg
 
-    logger.info(f"MCP ツール実行開始: {task_text[:100]}...")
+    logger.info(
+        f"MCP ツール実行開始 (max_steps={max_steps}): {task_text[:100]}..."
+    )
 
     try:
-        result_text = await run_task(task=task_text)
+        result_text = await run_task(task=task_text, max_steps=max_steps)
         logger.info(f"MCP ツール実行完了: 成功")
         return str(result_text)
     except Exception as e:

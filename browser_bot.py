@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 
-""" """
 import asyncio
+import logging
 import os
 import sys
-import logging
-from pathlib import Path
+
+import dotenv
 import httpx
-from dotenv import load_dotenv
 from browser_use import Agent, BrowserSession
 from langchain_openai import ChatOpenAI
-
 
 # browser_use をインポートする前にログ設定を行う
 os.environ['BROWSER_USE_LOGGING_LEVEL'] = 'result'
@@ -24,32 +22,37 @@ file_handler.setFormatter(
 
 # ルートロガーの設定
 logger = logging.getLogger()
-logger.handlers = []  # 既存のハンドラーをクリア
-logger.addHandler(file_handler)
 logger.setLevel(logging.DEBUG)
 
-# サードパーティーのロガーも設定
-for logger_name, log_level in [
-    ('httpx', logging.WARNING),
-    ('selenium', logging.WARNING),
-    ('playwright', logging.WARNING),
-    ('urllib3', logging.WARNING),
-    ('asyncio', logging.WARNING),
-    ('fastmcp', logging.INFO),
-    ('FastMCP.fastmcp.server.server', logging.INFO),
-    ('browser_use', logging.DEBUG),
-]:
-    _logger = logging.getLogger(logger_name)
-    _logger.handlers = []
-    _logger.addHandler(file_handler)
-    _logger.setLevel(log_level)
-    _logger.propagate = False
 
-# モジュール用のロガー
-logger = logging.getLogger(__name__)
+def setup_logger_for_mcp_server():
+    """
+    MCPサーバー用にロガーを設定する
+    標準出力にログを出さないようにする
+    """
+
+    logger.handlers = []  # 既存のハンドラーをクリア
+    logger.addHandler(file_handler)
+
+    # サードパーティーのロガーも設定
+    for logger_name, log_level in [
+        ('httpx', logging.WARNING),
+        ('selenium', logging.WARNING),
+        ('playwright', logging.WARNING),
+        ('urllib3', logging.WARNING),
+        ('asyncio', logging.WARNING),
+        ('fastmcp', logging.INFO),
+        ('FastMCP.fastmcp.server.server', logging.INFO),
+        ('browser_use', logging.DEBUG),
+    ]:
+        _logger = logging.getLogger(logger_name)
+        _logger.handlers = []
+        _logger.addHandler(file_handler)
+        _logger.setLevel(log_level)
+        _logger.propagate = False
 
 
-async def run_task(*, task: str):
+async def run_task(*, task: str, max_steps: int = 7):
     """
     :9222 の Chrome でログインする。
     """
@@ -62,11 +65,17 @@ async def run_task(*, task: str):
                 'http://localhost:9222/json/version', timeout=5.0
             )
             if response.status_code != 200:
-                error_msg = "❌ エラー: Chrome が :9222 で起動していません。launch-chrome.sh を実行してから再度お試しください。"
+                error_msg = (
+                    "❌ エラー: Chrome が :9222 で起動していません。"
+                    "launch-chrome.sh を実行してから再度お試しください。"
+                )
                 logger.error(error_msg)
                 return error_msg
     except httpx.ConnectError:
-        error_msg = "❌ エラー: Chrome が :9222 で起動していません。launch-chrome.sh を実行してから再度お試しください。"
+        error_msg = (
+            "❌ エラー: Chrome が :9222 で起動していません。"
+            "launch-chrome.sh を実行してから再度お試しください。"
+        )
         logger.error(error_msg)
         return error_msg
     except httpx.TimeoutException:
@@ -91,9 +100,9 @@ async def run_task(*, task: str):
     )
 
     try:
-        result = await agent.run(max_steps=5)
+        result = await agent.run(max_steps=max_steps)
         logger.info(
-            f"タスク完了: {str(result)[:200]}..."
+            f"タスク完了 (max_steps={max_steps}): {str(result)[:200]}..."
         )  # 最初の200文字のみログに記録
         return result
     except Exception as e:
@@ -103,7 +112,7 @@ async def run_task(*, task: str):
 
 
 if __name__ == '__main__':
-    import sys
+    dotenv.load_dotenv()
 
     if not sys.stdin.isatty():
         # 標準入力からタスクを読み取る
