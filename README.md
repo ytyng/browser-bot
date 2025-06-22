@@ -123,7 +123,7 @@ browser-bot/
 
 ## ログ
 
-すべての操作ログは以下のファイルに記録されます：
+mcpサーバーのログは以下のファイルに記録されます：
 
 - **browser_bot**: `/tmp/browser_bot.log`
 
@@ -167,11 +167,3 @@ browser-bot/
 
 - `max_steps` パラメーターを増やしてみてください
 - タスクの内容をより具体的に記述してください
-
-## ライセンス
-
-MIT License
-
-## 貢献
-
-Issue や Pull Request を歓迎します！
