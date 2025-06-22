@@ -14,9 +14,10 @@ BrowserUse を使用する MCP サーバーの実装
 import os
 import sys
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Annotated
 
 from dotenv import load_dotenv
+from pydantic import Field
 import fastmcp
 from browser_bot import run_task, logger
 
@@ -61,7 +62,38 @@ server = fastmcp.FastMCP(
     - "ページのスクリーンショットを撮ってください"
 """,
 )
-async def browser_use_local_chrome_9222_tool(task_text: str) -> str:
+async def browser_use_local_chrome_9222_tool(
+    task_text: Annotated[
+        str,
+        Field(
+            description=(
+                "実行したいブラウザ操作タスクの詳細な説明。日本語または英語で記述可能。"
+                "具体的で明確な指示を含めてください。"
+                "\n\n"
+                "タスクの書き方のポイント:\n"
+                "1. URL は完全な形式で記述 (例: https://example.com)\n"
+                "2. クリックする要素は具体的に説明 (例: '送信'と書かれた青いボタン)\n"
+                "3. 入力する内容は明確に指定 (例: メールアドレス欄に 'test@example.com' を入力)\n"
+                "4. 複数の操作は箇条書きで順序立てて記述\n"
+                "\n"
+                "良い例:\n"
+                "- 'https://www.google.com を開いて、検索ボックスに Python tutorial と入力し、検索ボタンをクリックしてください'\n"
+                "- '現在のページで、ログインフォームのユーザー名欄に admin、パスワード欄に password123 を入力して、ログインボタンをクリックしてください'\n"
+                "\n"
+                "悪い例:\n"
+                "- 'ログインして' (具体的な情報が不足)\n"
+                "- 'ボタンをクリック' (どのボタンか不明確)"
+            ),
+            min_length=10,
+            max_length=4000,
+            examples=[
+                "https://github.com を開いて、Search or jump to... と書かれた検索ボックスに fastmcp と入力してください",
+                "現在のページで、お問い合わせフォームの名前欄に '山田太郎'、メールアドレス欄に 'yamada@example.com'、メッセージ欄に 'テストメッセージです' と入力して、送信ボタンをクリックしてください",
+                "https://www.amazon.co.jp を開いて、検索ボックスに 'Python プログラミング' と入力し、検索を実行してください。その後、最初の検索結果をクリックしてください",
+            ],
+        ),
+    ],
+) -> str:
     """ブラウザ操作タスクを実行する"""
     if not task_text or not task_text.strip():
         error_msg = "❌ エラー: タスクの説明が空です。実行したい操作を指定してください。"
