@@ -1,6 +1,8 @@
 #!/usr/bin/env zsh
 
-# home-files/bin/browser-bot のパスに登録されたスクリプト経由で実行する
+# パスに登録された browser-bot のスクリプト経由で実行する
+
+
 
 echo "
 * https://www.mangazenkan.com を開いてください。

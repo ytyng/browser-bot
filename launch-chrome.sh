@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # Chrome を :9222 でテスト用に起動するスクリプト。
 
-# Alfred でも起動できるのでそっちが良い
+# Alfred 等のランチャーに登録すると良いと思います。
 
 # 既に:9222 で起動しているものあがれば kill
 lsof -ti :9222 | xargs kill -9
