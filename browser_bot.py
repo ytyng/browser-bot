@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import asyncio
 import logging
 import os
@@ -69,11 +70,17 @@ def get_llm():
     )
 
 
-async def run_task(*, task: str, max_steps: int = 7):
+async def run_task(*, task: str, max_steps: int | None = None):
     """
     :9222 の Chrome でログインする。
     """
     logger.info(f"タスク開始: {task}")
+
+    if max_steps is None:
+        # 環境変数から max_steps を取得
+        max_steps = int(os.getenv('BROWSER_USE_MAX_STEPS', 7))
+
+    logger.debug(f"max_steps: {max_steps}")
 
     # Chrome が :9222 で起動しているか確認
     try:
@@ -131,6 +138,16 @@ async def run_task(*, task: str, max_steps: int = 7):
 if __name__ == '__main__':
     dotenv.load_dotenv()
 
+    parser = argparse.ArgumentParser(
+        description="Run a browser automation task."
+    )
+    parser.add_argument(
+        '--max-steps',
+        type=int,
+        help='Maximum number of steps for the agent to run.',
+    )
+    args = parser.parse_args()
+
     if not sys.stdin.isatty():
         # 標準入力からタスクを読み取る
         task = sys.stdin.read().strip()
@@ -142,4 +159,4 @@ if __name__ == '__main__':
         print("例: echo 'タスク内容' | python browser_bot.py")
         sys.exit(1)
 
-    asyncio.run(run_task(task=task))
+    asyncio.run(run_task(task=task, max_steps=args.max_steps))
