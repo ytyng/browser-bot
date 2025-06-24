@@ -11,6 +11,7 @@ BrowserUse を使用する MCP サーバーの実装
     - 必要な環境変数が設定されていること (OPENAI_API_KEY など)
 """
 
+import base64
 import os
 import sys
 from typing import Annotated
@@ -19,7 +20,14 @@ import fastmcp
 from dotenv import load_dotenv
 from pydantic import Field
 
-from browser_bot import logger, run_task, setup_logger_for_mcp_server
+from browser_bot import (
+    logger,
+    run_task,
+    setup_logger_for_mcp_server,
+    get_page_source,
+    get_visible_screenshot,
+    get_full_screenshot,
+)
 
 setup_logger_for_mcp_server()
 
@@ -146,6 +154,184 @@ async def browser_use_local_chrome_9222_tool(
         return str(result_text)
     except Exception as e:
         error_msg = f"❌ エラー: タスク実行中に予期しないエラーが発生しました: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+# ソースコード取得ツール
+@server.tool(
+    name="get_page_source",
+    description="""現在アクティブなタブのソースコードを取得します。
+
+このツールは Playwright を使用してブラウザに直接接続し、以下の情報を取得します:
+- ページのソースコード (HTML)
+- 現在の URL
+- ページタイトル
+
+使用例:
+- ページの HTML 構造を解析したい時
+- フォームやボタンの要素を確認したい時
+- ページのメタデータを取得したい時
+""",
+)
+async def get_page_source_tool() -> str:
+    """現在アクティブなタブのソースコードを取得する"""
+    logger.info("ソースコード取得ツール実行開始")
+
+    try:
+        result = await get_page_source()
+
+        if 'error' in result:
+            logger.error(f"ソースコード取得エラー: {result['error']}")
+            return result['error']
+
+        # 結果を整形して返す
+        response = f"""# 取得結果
+
+## URL
+
+{result['url']}
+
+## タイトル
+
+{result['title']}
+
+## ソースコード
+
+```html
+{result['source']}
+```
+"""
+
+        logger.info(f"ソースコード取得ツール実行完了: {result['url']}")
+        return response
+
+    except Exception as e:
+        error_msg = f"❌ エラー: ソースコード取得中に予期しないエラーが発生しました: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+# 表示箇所のスクリーンショット取得ツール
+@server.tool(
+    name="get_visible_screenshot",
+    description="""現在アクティブなタブの表示されている箇所をスクリーンショットします。
+
+このツールは Playwright を使用してブラウザに直接接続し、以下の情報を取得します:
+- 現在表示されている領域のスクリーンショット (PNG 形式、Base64 エンコード)
+- 現在の URL
+- ページタイトル
+
+注意: 画像サイズが大きい場合は自動的に縮小されます。
+
+使用例:
+- 現在見えている部分の状態を確認したい時
+- エラーメッセージや特定の UI 要素を確認したい時
+- ページの見た目を記録したい時
+""",
+)
+async def get_visible_screenshot_tool() -> str:
+    """現在表示されている箇所のスクリーンショットを取得する"""
+    logger.info("表示箇所のスクリーンショット取得ツール実行開始")
+
+    try:
+        result = await get_visible_screenshot()
+
+        if 'error' in result:
+            logger.error(f"スクリーンショット取得エラー: {result['error']}")
+            return result['error']
+
+        # スクリーンショットを Base64 エンコード
+        screenshot_base64 = base64.b64encode(result['screenshot']).decode(
+            'utf-8'
+        )
+
+        # 結果を整形して返す
+        response = f"""# 取得結果
+
+## URL
+
+{result['url']}
+
+## タイトル
+
+{result['title']}
+
+## スクリーンショット (表示箇所)
+
+<img src="data:image/png;base64,{screenshot_base64}" alt="Visible Screenshot" />
+"""
+
+        logger.info(
+            f"表示箇所のスクリーンショット取得ツール実行完了: {result['url']}"
+        )
+        return response
+
+    except Exception as e:
+        error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+# 全領域のスクリーンショット取得ツール
+@server.tool(
+    name="get_full_screenshot",
+    description="""現在アクティブなタブの全領域をスクリーンショットします。
+
+このツールは Playwright を使用してブラウザに直接接続し、以下の情報を取得します:
+- ページ全体のスクリーンショット (PNG 形式、Base64 エンコード)
+- 現在の URL
+- ページタイトル
+
+注意:
+- 長いページの場合、スクロールして全体を撮影します
+- 画像サイズが大きい場合は自動的に縮小されます
+
+使用例:
+- ページ全体のレイアウトを確認したい時
+- スクロールが必要な長いページの全体像を取得したい時
+- ページ全体の構成を記録したい時
+""",
+)
+async def get_full_screenshot_tool() -> str:
+    """ページ全体のスクリーンショットを取得する"""
+    logger.info("全領域のスクリーンショット取得ツール実行開始")
+
+    try:
+        result = await get_full_screenshot()
+
+        if 'error' in result:
+            logger.error(f"スクリーンショット取得エラー: {result['error']}")
+            return result['error']
+
+        # スクリーンショットを Base64 エンコード
+        screenshot_base64 = base64.b64encode(result['screenshot']).decode(
+            'utf-8'
+        )
+
+        # 結果を整形して返す
+        response = f"""# 取得結果
+
+## URL
+
+{result['url']}
+
+## タイトル
+
+{result['title']}
+
+# スクリーンショット (全領域)
+
+<img src="data:image/png;base64,{screenshot_base64}" alt="Full Page Screenshot" />
+"""
+
+        logger.info(
+            f"全領域のスクリーンショット取得ツール実行完了: {result['url']}"
+        )
+        return response
+
+    except Exception as e:
+        error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 
