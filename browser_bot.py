@@ -6,6 +6,9 @@ import logging
 import os
 import sys
 
+# テレメトリを無効化
+os.environ['ANONYMIZED_TELEMETRY'] = 'false'
+
 import dotenv
 import base64
 import io

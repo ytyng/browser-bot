@@ -15,6 +15,9 @@ import os
 import sys
 from typing import Annotated
 
+# テレメトリを無効化
+os.environ['ANONYMIZED_TELEMETRY'] = 'false'
+
 import fastmcp
 from fastmcp.utilities.types import Image
 from dotenv import load_dotenv

@@ -2,12 +2,18 @@
 
 Chrome の自動操作を行う MCP (Model Context Protocol) サーバーです。browser_use を使用して、ローカルで起動している Chrome (:9222) に接続し、Web ブラウザの操作を自動化します。
 
+## 主な機能
+
+- **ブラウザ自動操作**: 自然言語による指示でブラウザ操作を実行
+- **スクリーンショット取得**: 表示領域または全領域のスクリーンショット
+- **ソースコード取得**: 現在表示されているページの HTML ソース
+- **MCP プロトコル対応**: Claude などの AI アシスタントからの操作が可能
 
 ## 必要な環境
 
 - Python 3.12+
 - Chrome ブラウザ
-- OpenAI API キー
+- OpenAI API キー または Google API キー (Gemini 使用時)
 - uv (Python パッケージマネージャー)
 
 ## インストールと設定
@@ -22,20 +28,16 @@ uv sync
 
 `.env` ファイルを作成し、以下を設定する
 
-#### OpenAI gpt-4.1-mini を使う場合
+#### OpenAI を使う場合
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
+# デフォルトは gpt-4.1-mini
+# 他のモデルを使う場合は BROWSER_USE_LLM_MODEL を設定
+# BROWSER_USE_LLM_MODEL=gpt-4o
 ```
 
-#### OpenAI その他のモデルを使う場合
-
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-BROWSER_USE_LLM_MODEL=your_model_name_here
-```
-
-#### Google Gemini 2.5 Flash を使う場合
+#### Google Gemini を使う場合
 
 ```env
 GOOGLE_API_KEY=your_google_api_key_here
@@ -76,7 +78,7 @@ echo "https://www.google.com を開いて、'Python tutorial' を検索してく
 
 ## MCP ツールの仕様
 
-### browser_use_local_chrome_9222
+### 1. browser_use_local_chrome_9222
 
 Chrome ブラウザでの自動操作を実行するツールです。
 
@@ -84,6 +86,18 @@ Chrome ブラウザでの自動操作を実行するツールです。
 
 - **task_text** (str, 必須): 実行したいブラウザ操作タスクの詳細な説明
 - **max_steps** (int, オプション): 最大実行ステップ数（デフォルト: 7、範囲: 1-30）
+
+### 2. get_page_source
+
+現在アクティブなタブのソースコードを取得します。ページの HTML 構造を解析したい時に使用します。
+
+### 3. get_visible_screenshot
+
+現在アクティブなタブの表示されている箇所をスクリーンショットします。現在見えている部分の状態を確認したい時に使用します。
+
+### 4. get_full_screenshot
+
+現在アクティブなタブの全領域をスクリーンショットします。ページ全体のレイアウトを確認したい時に使用します。
 
 #### タスクの書き方のポイント
 
@@ -122,7 +136,7 @@ https://www.amazon.co.jp を開いて、検索ボックスに 'Python プログ�
 
 ```
 browser-bot/
-├── browser_bot.py              # メインの操作実行スクリプト
+├── browser_bot.py              # メインの操作実行エンジン
 ├── mcp_server.py              # MCP サーバー実装
 ├── launch-mcp-server.sh       # MCP サーバー起動スクリプト
 ├── launch-chrome.sh           # Chrome 起動スクリプト（デバッグポート付き）
@@ -137,11 +151,24 @@ browser-bot/
 └── CLAUDE.md
 ```
 
+## 依存関係
+
+- **browser-use**: ブラウザ自動操作ライブラリ
+- **fastmcp**: MCP サーバー実装フレームワーク
+- **langchain_openai**: OpenAI LLM 統合
+- **langchain_google_genai**: Google Gemini LLM 統合
+- **playwright**: ブラウザ制御
+- **httpx**: HTTP クライアント
+- **pillow**: 画像処理
+- **python-dotenv**: 環境変数管理
+
 ## ログ
 
-mcpサーバーのログは以下のファイルに記録されます：
+すべてのログは以下のファイルに記録されます：
 
-- **browser_bot**: `/tmp/browser_bot.log`
+- **ログファイル**: `/tmp/browser_bot.log`
+
+注意: MCP サーバーでは stdout にログを出力しません（stdio 通信を妨げるため）
 
 ## テスト
 

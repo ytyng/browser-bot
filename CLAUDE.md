@@ -6,6 +6,13 @@
 
 Browser Bot は Chrome ブラウザの自動操作を行う MCP (Model Context Protocol) サーバーです。browser_use ライブラリを使用して、自然言語による指示でブラウザ操作を実行できます。
 
+### 主な機能
+
+- **ブラウザ自動操作**: 自然言語による指示でブラウザ操作を実行
+- **スクリーンショット取得**: 表示領域または全領域のスクリーンショット
+- **ソースコード取得**: 現在表示されているページの HTML ソース
+- **複数 LLM 対応**: OpenAI GPT および Google Gemini をサポート
+
 ## アーキテクチャ
 
 ### コアコンポーネント
@@ -19,7 +26,11 @@ Browser Bot は Chrome ブラウザの自動操作を行う MCP (Model Context P
 
 - **browser_use**: ブラウザ自動操作ライブラリ
 - **fastmcp**: MCP サーバー実装フレームワーク
-- **langchain_openai**: LLM 統合
+- **langchain_openai**: OpenAI LLM 統合
+- **langchain_google_genai**: Google Gemini LLM 統合
+- **playwright**: ブラウザ制御
+- **httpx**: HTTP クライアント
+- **pillow**: 画像処理
 - **pydantic**: データバリデーション
 
 ## 開発時の重要なポイント
@@ -41,6 +52,11 @@ Browser Bot は Chrome ブラウザの自動操作を行う MCP (Model Context P
 - 初期化シーケンス: `initialize` → `notifications/initialized` → `tools/list`
 - Pydantic Field を使った詳細なパラメーター説明
 - JSON Schema による入力バリデーション
+- 4つの MCP ツール実装:
+  - `browser_use_local_chrome_9222`: ブラウザ自動操作
+  - `get_page_source`: HTML ソースコード取得
+  - `get_visible_screenshot`: 表示箇所のスクリーンショット
+  - `get_full_screenshot`: 全領域のスクリーンショット
 
 ## コーディング規約
 
@@ -83,7 +99,7 @@ uv sync
 ./launch-chrome.sh
 
 # 環境変数の確認
-cat .env  # OPENAI_API_KEY が設定されていること
+cat .env  # OPENAI_API_KEY または GOOGLE_API_KEY が設定されていること
 ```
 
 ### 2. テスト実行
@@ -160,7 +176,16 @@ pkill -f chrome
 - `initialize` → `notifications/initialized` の順序を確認
 - JSON-RPC メッセージの形式を確認
 
-### 3. タスク実行失敗
+### 3. LLM 接続エラー
+
+**問題**: OpenAI または Google API 接続エラー
+
+**解決**:
+- `.env` ファイルで API キーを確認
+- モデル名が正しいか確認（例: `gemini-2.5-flash`）
+- 使用量制限に達していないか確認
+
+### 4. タスク実行失敗
 
 **問題**: `max_steps` 制限でタスクが途中終了
 
@@ -197,6 +222,7 @@ pkill -f chrome
 - `mcp_server.py` に新しいツール定義
 - `browser_bot.py` に実装ロジック追加
 - テストスクリプトの作成
+- 必要に応じて新しい依存関係を `pyproject.toml` に追加
 
 ### 2. エラーハンドリング強化
 
@@ -237,11 +263,17 @@ uv sync
 ### 3. 依存関係管理
 
 ```bash
-# pyproject.toml の依存関係を更新
-# uv add <package_name>
+# 新しい依存関係の追加
+uv add <package_name>
+
+# 開発依存関係の追加
+uv add --dev <package_name>
 
 # ロックファイルの更新
 uv lock
+
+# 同期
+uv sync
 ```
 
 ## セキュリティ考慮事項
