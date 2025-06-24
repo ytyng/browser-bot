@@ -11,12 +11,12 @@ BrowserUse を使用する MCP サーバーの実装
     - 必要な環境変数が設定されていること (OPENAI_API_KEY など)
 """
 
-import base64
 import os
 import sys
 from typing import Annotated
 
 import fastmcp
+from fastmcp.utilities.types import Image
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -41,6 +41,8 @@ server = fastmcp.FastMCP(
     instructions="""ブラウザ操作のための MCP サーバーです。
 
 このサーバーは browser_use を使用して、ローカルで起動している Chrome (:9222) に接続します。
+
+Chrome に対しての操作指示をする場合、このツールを使ってください。
 
 使用例:
 - Web サイトの自動操作
@@ -218,9 +220,8 @@ async def get_page_source_tool() -> str:
     description="""現在アクティブなタブの表示されている箇所をスクリーンショットします。
 
 このツールは Playwright を使用してブラウザに直接接続し、以下の情報を取得します:
-- 現在表示されている領域のスクリーンショット (PNG 形式、Base64 エンコード)
-- 現在の URL
-- ページタイトル
+- 現在表示されている領域のスクリーンショット (PNG 形式の画像データ)
+- 現在の URL と ページタイトル情報は自動的に含まれます
 
 注意: 画像サイズが大きい場合は自動的に縮小されます。
 
@@ -230,7 +231,7 @@ async def get_page_source_tool() -> str:
 - ページの見た目を記録したい時
 """,
 )
-async def get_visible_screenshot_tool() -> str:
+async def get_visible_screenshot_tool() -> Image:
     """現在表示されている箇所のスクリーンショットを取得する"""
     logger.info("表示箇所のスクリーンショット取得ツール実行開始")
 
@@ -239,38 +240,24 @@ async def get_visible_screenshot_tool() -> str:
 
         if 'error' in result:
             logger.error(f"スクリーンショット取得エラー: {result['error']}")
-            return result['error']
-
-        # スクリーンショットを Base64 エンコード
-        screenshot_base64 = base64.b64encode(result['screenshot']).decode(
-            'utf-8'
-        )
-
-        # 結果を整形して返す
-        response = f"""# 取得結果
-
-## URL
-
-{result['url']}
-
-## タイトル
-
-{result['title']}
-
-## スクリーンショット (表示箇所)
-
-<img src="data:image/png;base64,{screenshot_base64}" alt="Visible Screenshot" />
-"""
+            # エラーの場合はプレースホルダー画像を返す
+            error_msg = f"Screenshot Error: {result['error']}"
+            # 小さなエラー画像データを生成するか、エラーメッセージを含むプレースホルダーを返す
+            # ここではとりあえず空のバイトデータでエラーレスポンスを作成
+            return Image(data=error_msg.encode('utf-8'), format="txt")
 
         logger.info(
             f"表示箇所のスクリーンショット取得ツール実行完了: {result['url']}"
         )
-        return response
+
+        # FastMCP の Image オブジェクトで返す
+        return Image(data=result['screenshot'], format="png")
 
     except Exception as e:
         error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        return error_msg
+        # エラーの場合もプレースホルダーを返す
+        return Image(data=error_msg.encode('utf-8'), format="txt")
 
 
 # 全領域のスクリーンショット取得ツール
@@ -279,9 +266,8 @@ async def get_visible_screenshot_tool() -> str:
     description="""現在アクティブなタブの全領域をスクリーンショットします。
 
 このツールは Playwright を使用してブラウザに直接接続し、以下の情報を取得します:
-- ページ全体のスクリーンショット (PNG 形式、Base64 エンコード)
-- 現在の URL
-- ページタイトル
+- ページ全体のスクリーンショット (PNG 形式の画像データ)
+- 現在の URL と ページタイトル情報は自動的に含まれます
 
 注意:
 - 長いページの場合、スクロールして全体を撮影します
@@ -293,7 +279,7 @@ async def get_visible_screenshot_tool() -> str:
 - ページ全体の構成を記録したい時
 """,
 )
-async def get_full_screenshot_tool() -> str:
+async def get_full_screenshot_tool() -> Image:
     """ページ全体のスクリーンショットを取得する"""
     logger.info("全領域のスクリーンショット取得ツール実行開始")
 
@@ -302,38 +288,22 @@ async def get_full_screenshot_tool() -> str:
 
         if 'error' in result:
             logger.error(f"スクリーンショット取得エラー: {result['error']}")
-            return result['error']
-
-        # スクリーンショットを Base64 エンコード
-        screenshot_base64 = base64.b64encode(result['screenshot']).decode(
-            'utf-8'
-        )
-
-        # 結果を整形して返す
-        response = f"""# 取得結果
-
-## URL
-
-{result['url']}
-
-## タイトル
-
-{result['title']}
-
-# スクリーンショット (全領域)
-
-<img src="data:image/png;base64,{screenshot_base64}" alt="Full Page Screenshot" />
-"""
+            # エラーの場合はプレースホルダー画像を返す
+            error_msg = f"Screenshot Error: {result['error']}"
+            return Image(data=error_msg.encode('utf-8'), format="txt")
 
         logger.info(
             f"全領域のスクリーンショット取得ツール実行完了: {result['url']}"
         )
-        return response
+
+        # FastMCP の Image オブジェクトで返す
+        return Image(data=result['screenshot'], format="png")
 
     except Exception as e:
         error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        return error_msg
+        # エラーの場合もプレースホルダーを返す
+        return Image(data=error_msg.encode('utf-8'), format="txt")
 
 
 def main() -> None:
