@@ -63,11 +63,14 @@ def setup_logger_for_mcp_server():
 def get_llm():
 
     _llm_model_name = os.getenv('BROWSER_USE_LLM_MODEL', None)
-    if _llm_model_name.startswith('gemini'):
-        # Google Gemini
-        from langchain_google_genai import ChatGoogleGenerativeAI
+    if _llm_model_name:
+        if _llm_model_name.startswith('gemini'):
+            # Google Gemini
+            from langchain_google_genai import ChatGoogleGenerativeAI
 
-        return ChatGoogleGenerativeAI(model=_llm_model_name, temperature=0.0)
+            return ChatGoogleGenerativeAI(
+                model=_llm_model_name, temperature=0.0
+            )
 
     # default: OpenAI
     from langchain_openai import ChatOpenAI
@@ -166,7 +169,9 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
         # 既存のコンテキストを取得
         contexts = browser.contexts
         if not contexts:
-            error_msg = "❌ エラー: Chrome にアクティブなコンテキストがありません"
+            error_msg = (
+                "❌ エラー: Chrome にアクティブなコンテキストがありません"
+            )
             logger.error(error_msg)
             await browser.close()
             return None, None, error_msg
@@ -187,11 +192,13 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
 
         # 最も最近アクティブになったページを特定
         active_page = await _find_most_recent_active_page(all_pages)
-        
+
         if not active_page:
             # フォールバック: 最初の有効なページを使用
             active_page = all_pages[0]
-            logger.info("最新のアクティブページが特定できないため、最初のページを使用します")
+            logger.info(
+                "最新のアクティブページが特定できないため、最初のページを使用します"
+            )
 
         logger.info(f"アクティブページを特定: {active_page.url}")
 
@@ -202,10 +209,12 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
             await active_page.wait_for_load_state('networkidle')
 
         return active_page, browser, None
-        
+
     except Exception as e:
         await browser.close()
-        error_msg = f"❌ エラー: アクティブページの取得中にエラーが発生しました: {e}"
+        error_msg = (
+            f"❌ エラー: アクティブページの取得中にエラーが発生しました: {e}"
+        )
         logger.error(error_msg, exc_info=True)
         return None, None, error_msg
 
@@ -213,10 +222,10 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
 async def _find_most_recent_active_page(pages):
     """
     複数のページから最も最近アクティブになったページを特定する
-    
+
     Args:
         pages: ページのリスト
-        
+
     Returns:
         page: 最もアクティブなページ、または None
     """
@@ -227,13 +236,16 @@ async def _find_most_recent_active_page(pages):
             try:
                 if page.is_closed():
                     continue
-                    
+
                 # ページの基本情報を取得
                 url = page.url
-                title = await page.title() if not page.is_closed() else "Unknown"
-                
+                title = (
+                    await page.title() if not page.is_closed() else "Unknown"
+                )
+
                 # ページに JavaScript を実行して最終アクセス時刻を取得
-                last_activity = await page.evaluate("""
+                last_activity = await page.evaluate(
+                    """
                     () => {
                         // document.lastModified または現在時刻を使用
                         return {
@@ -243,40 +255,52 @@ async def _find_most_recent_active_page(pages):
                             visibilityState: document.visibilityState
                         };
                     }
-                """)
-                
-                page_info.append({
-                    'page': page,
-                    'url': url,
-                    'title': title,
-                    'has_focus': last_activity.get('hasFocus', False),
-                    'visibility_state': last_activity.get('visibilityState', 'hidden'),
-                    'timestamp': last_activity.get('timestamp', 0)
-                })
-                
+                """
+                )
+
+                page_info.append(
+                    {
+                        'page': page,
+                        'url': url,
+                        'title': title,
+                        'has_focus': last_activity.get('hasFocus', False),
+                        'visibility_state': last_activity.get(
+                            'visibilityState', 'hidden'
+                        ),
+                        'timestamp': last_activity.get('timestamp', 0),
+                    }
+                )
+
             except Exception as e:
                 logger.debug(f"ページ情報取得エラー: {e}")
                 continue
-        
+
         if not page_info:
             return None
-            
+
         # 優先順位でソート
         # 1. フォーカスがあるページ
         # 2. visible 状態のページ
         # 3. タイムスタンプが新しいページ
-        page_info.sort(key=lambda x: (
-            x['has_focus'],
-            x['visibility_state'] == 'visible',
-            x['timestamp']
-        ), reverse=True)
-        
+        page_info.sort(
+            key=lambda x: (
+                x['has_focus'],
+                x['visibility_state'] == 'visible',
+                x['timestamp'],
+            ),
+            reverse=True,
+        )
+
         selected_page = page_info[0]
-        logger.info(f"最もアクティブなページを選択: {selected_page['title']} ({selected_page['url']})")
-        logger.debug(f"選択理由 - フォーカス: {selected_page['has_focus']}, 表示状態: {selected_page['visibility_state']}")
-        
+        logger.info(
+            f"最もアクティブなページを選択: {selected_page['title']} ({selected_page['url']})"
+        )
+        logger.debug(
+            f"選択理由 - フォーカス: {selected_page['has_focus']}, 表示状態: {selected_page['visibility_state']}"
+        )
+
         return selected_page['page']
-        
+
     except Exception as e:
         logger.error(f"アクティブページの特定中にエラー: {e}", exc_info=True)
         return None
@@ -347,17 +371,17 @@ async def get_page_source(*, url: str | None = None):
         try:
             # 現在の状態を取得
             current_url = page.url
-            
+
             # ページが完全に読み込まれるまで待機
             await page.wait_for_load_state('domcontentloaded')
-            
+
             # タイトルとソースコードを取得
             try:
                 title = await page.title()
             except Exception:
                 title = "Unknown"
                 logger.warning("タイトル取得に失敗しました")
-                
+
             source = await page.content()
 
             logger.info(f"ソースコード取得完了: {current_url}")
@@ -391,10 +415,10 @@ async def get_visible_screenshot(*, url: str | None = None):
         try:
             # 現在の状態を取得
             current_url = page.url
-            
+
             # ページが完全に読み込まれるまで待機
             await page.wait_for_load_state('domcontentloaded')
-            
+
             # タイトルを取得
             try:
                 title = await page.title()
@@ -419,12 +443,9 @@ async def get_visible_screenshot(*, url: str | None = None):
             await browser.close()
 
 
-async def get_full_screenshot(*, url: str | None = None):
+async def get_full_screenshot():
     """
     現在アクティブなタブの全領域をスクリーンショットする
-
-    Args:
-        url: 指定されたらその URL に移動してから取得
 
     Returns:
         dict: {
@@ -443,10 +464,10 @@ async def get_full_screenshot(*, url: str | None = None):
         try:
             # 現在の状態を取得
             current_url = page.url
-            
+
             # ページが完全に読み込まれるまで待機
             await page.wait_for_load_state('domcontentloaded')
-            
+
             # タイトルを取得
             try:
                 title = await page.title()
