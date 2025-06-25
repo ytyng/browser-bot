@@ -323,9 +323,12 @@ def _resize_image_if_needed(
     return output.getvalue()
 
 
-async def get_page_source():
+async def get_page_source(*, url: str | None = None):
     """
     現在アクティブなタブのソースコードを取得する
+
+    Args:
+        url: 指定されたらその URL に移動してから取得
 
     Returns:
         dict: {
@@ -337,7 +340,7 @@ async def get_page_source():
     logger.info("ソースコード取得開始")
 
     async with async_playwright() as p:
-        page, browser, error = await _get_active_page(p)
+        page, browser, error = await _get_active_page(p, url=url)
         if error:
             return {'error': error}
 
@@ -364,9 +367,12 @@ async def get_page_source():
             await browser.close()
 
 
-async def get_visible_screenshot():
+async def get_visible_screenshot(*, url: str | None = None):
     """
     現在アクティブなタブの表示されている箇所をスクリーンショットする
+
+    Args:
+        url: 指定されたらその URL に移動してから取得
 
     Returns:
         dict: {
@@ -378,7 +384,7 @@ async def get_visible_screenshot():
     logger.info("表示箇所のスクリーンショット取得開始")
 
     async with async_playwright() as p:
-        page, browser, error = await _get_active_page(p)
+        page, browser, error = await _get_active_page(p, url=url)
         if error:
             return {'error': error}
 
@@ -413,9 +419,12 @@ async def get_visible_screenshot():
             await browser.close()
 
 
-async def get_full_screenshot():
+async def get_full_screenshot(*, url: str | None = None):
     """
     現在アクティブなタブの全領域をスクリーンショットする
+
+    Args:
+        url: 指定されたらその URL に移動してから取得
 
     Returns:
         dict: {
@@ -427,7 +436,7 @@ async def get_full_screenshot():
     logger.info("全領域のスクリーンショット取得開始")
 
     async with async_playwright() as p:
-        page, browser, error = await _get_active_page(p)
+        page, browser, error = await _get_active_page(p, url=url)
         if error:
             return {'error': error}
 
