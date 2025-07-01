@@ -10,26 +10,31 @@ BrowserUse を使用する MCP サーバーの実装
     - Chrome が --remote-debugging-port=9222 で起動していること
     - 必要な環境変数が設定されていること (OPENAI_API_KEY など)
 """
-
+import asyncio
 import os
+import platform
+import socket
+import subprocess
 import sys
 from typing import Annotated
+
+import httpx
 
 # テレメトリを無効化
 os.environ['ANONYMIZED_TELEMETRY'] = 'false'
 
 import fastmcp
-from fastmcp.utilities.types import Image
 from dotenv import load_dotenv
+from fastmcp.utilities.types import Image
 from pydantic import Field
 
 from browser_bot import (
+    get_full_screenshot,
+    get_page_source,
+    get_visible_screenshot,
     logger,
     run_task,
     setup_logger_for_mcp_server,
-    get_page_source,
-    get_visible_screenshot,
-    get_full_screenshot,
 )
 
 setup_logger_for_mcp_server()
@@ -67,10 +72,13 @@ Chrome に対しての操作指示をする場合、このツールを使って�
 # ツールを登録
 @server.tool(
     name="browser_use_local_chrome",
-    description="""ローカルで起動している Chrome (:9222) に接続して、browser_use ライブラリを用いてブラウザ操作を行うツールです。
+    description="""ローカルで起動している Chrome (:9222) に接続して、
+browser_use ライブラリを用いてブラウザ操作を行うツールです。
 
-このツールは、基本的には操作をするだけです。結果の確認や、ページの状態を取得することには適していません。
-ページの状態を確認するには、 get_page_source_code や get_visible_screenshot、get_full_screenshot ツールを使用してください。
+このツールは、基本的には操作をするだけです。
+結果の確認や、ページの状態を取得することには適していません。
+ページの状態を確認するには、 get_page_source_code や
+get_visible_screenshot、get_full_screenshot ツールを使用してください。
 
 パラメーター:
     task_text (str):
@@ -246,7 +254,8 @@ async def get_page_source_code(
 # 表示箇所のスクリーンショット取得ツール
 @server.tool(
     name="get_visible_screenshot",
-    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL の表示されている箇所をスクリーンショットします。
+    description="""Browser_bot (Chrome) の現在アクティブなタブまたは
+指定された URL の表示されている箇所をスクリーンショットします。
 
 このツールは Browser_bot (Chrome) に Playwright を使用して接続し、以下の情報を取得します:
 - 現在表示されている領域のスクリーンショット (PNG 形式の画像データ)
@@ -361,6 +370,158 @@ async def get_full_screenshot_tool(
         logger.error(error_msg, exc_info=True)
         # エラーの場合もプレースホルダーを返す
         return Image(data=error_msg.encode('utf-8'), format="txt")
+
+
+# Chrome 起動ツール
+@server.tool(
+    name="launch_chrome_with_debug",
+    description="""Chrome をデバッグポート 9222 で起動します。
+
+このツールは、browser_bot が接続するための Chrome ブラウザを起動します。
+既に起動している場合は、その旨を通知します。
+
+機能:
+- ポート 9222 の使用状況をチェック
+- 既存の Chrome プロセスを検知
+- 新規 Chrome の起動
+- プラットフォーム対応 (macOS, Linux, Windows)
+
+使用用途:
+- browser_bot を使用する前の Chrome 起動
+- 開発・テスト環境の準備
+""",
+)
+async def launch_chrome_with_debug() -> str:
+    """Chrome をデバッグポート 9222 で起動する"""
+    logger.info("Chrome 起動ツール実行開始")
+
+    # ポート 9222 が使用中かチェック
+    def is_port_in_use(port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('', port))
+                return False
+            except socket.error:
+                return True
+
+    if is_port_in_use(9222):
+        # ポートが使用中の場合、Chrome が起動しているか確認
+        try:
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    "http://localhost:9222/json/version", timeout=2
+                )
+                if response.status_code == 200:
+                    version_info = response.json()
+                    browser_info = version_info.get('Browser', 'Unknown')
+                    logger.info(f"Chrome は既に起動しています: {browser_info}")
+                    return (
+                        f"✅ Chrome は既に起動しています (ポート 9222)\n\n"
+                        f"ブラウザ情報: {browser_info}\n\n"
+                        "browser_bot ツールを使用できます。"
+                    )
+        except Exception:
+            pass
+
+        logger.warning(
+            "ポート 9222 は使用中ですが、Chrome ではない可能性があります"
+        )
+        return "⚠️ ポート 9222 は既に使用されていますが、Chrome ではない可能性があります。\n\n既存のプロセスを確認してください。"
+
+    # Chrome の実行パスを取得
+    system = platform.system()
+    chrome_paths = []
+
+    if system == "Darwin":  # macOS
+        chrome_paths = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            (
+                "/Applications/Google Chrome Canary.app/Contents/MacOS/"
+                "Google Chrome Canary"
+            ),
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+    elif system == "Linux":
+        chrome_paths = [
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/snap/bin/chromium",
+        ]
+    elif system == "Windows":
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe",
+            r"C:\Program Files\Google\Chrome Dev\Application\chrome.exe",
+        ]
+
+    # 実行可能な Chrome パスを探す
+    chrome_executable = None
+    for path in chrome_paths:
+        if os.path.exists(path):
+            chrome_executable = path
+            break
+
+    if not chrome_executable:
+        error_msg = (
+            f"❌ エラー: Chrome が見つかりません。Chrome をインストールしてください。\n\n検索したパス:\n"
+            + "\n".join(chrome_paths)
+        )
+        logger.error(error_msg)
+        return error_msg
+
+    # Chrome 起動オプション
+    user_data_dir = os.path.expanduser("~/.google-chrome-debug")
+    chrome_args = [
+        chrome_executable,
+        "--remote-debugging-port=9222",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run",
+        "--disable-default-apps",
+    ]
+
+    try:
+        # Chrome を起動
+        logger.info(f"Chrome を起動しています: {chrome_executable}")
+        subprocess.Popen(
+            chrome_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+        await asyncio.sleep(2)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    "http://localhost:9222/json/version", timeout=5
+                )
+                if response.status_code == 200:
+                    version_info = response.json()
+                    browser_info = version_info.get('Browser', 'Unknown')
+                    success_msg = (
+                        f"✅ Chrome を正常に起動しました (ポート 9222)\n\n"
+                        f"ブラウザ情報: {browser_info}\n\n"
+                        "browser_bot ツールを使用できます。"
+                    )
+                    logger.info(success_msg)
+                    return success_msg
+        except Exception as e:
+            logger.warning(
+                f"Chrome の起動確認でエラー: {e.__class__.__name__}: {e}"
+            )
+
+        # 起動したけど確認できない場合
+        return (
+            "✅ Chrome を起動しました (ポート 9222)\n\n"
+            "起動確認はできませんでしたが、少し待ってから browser_bot ツールを試してください。"
+        )
+
+    except Exception as e:
+        error_msg = f"❌ エラー: Chrome の起動に失敗しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
 
 
 def main() -> None:
