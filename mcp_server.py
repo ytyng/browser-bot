@@ -33,6 +33,7 @@ from browser_bot import (
     get_page_source,
     get_visible_screenshot,
     logger,
+    run_script,
     run_task,
     setup_logger_for_mcp_server,
 )
@@ -84,6 +85,9 @@ get_visible_screenshot、get_full_screenshot ツールを使用してくださ�
     task_text (str):
         実行したいタスクの説明。 browser_use のタスクプロンプトです。
         例: "https://example.com を開いて、ログインボタンをクリックしてください"
+
+    url (str | None):
+        最初に開く URL。指定された場合、タスク実行前にこの URL に移動します。
 
 戻り値:
     str: タスクの実行結果。成功時は結果の説明、失敗時はエラーメッセージ。
@@ -160,6 +164,16 @@ async def browser_use_local_chrome(
             examples=[3, 7, 15],
         ),
     ] = 7,
+    url: Annotated[
+        str | None,
+        Field(
+            description=(
+                "最初に開く URL。指定された場合、タスク実行前にこの URL に移動します。\n"
+                "タスクの説明に URL が含まれている場合でも、この URL が優先されます。"
+            ),
+            examples=["https://example.com", "https://github.com", None],
+        ),
+    ] = None,
 ) -> str:
     """ブラウザ操作タスクを実行する"""
     if not task_text or not task_text.strip():
@@ -168,11 +182,13 @@ async def browser_use_local_chrome(
         return error_msg
 
     logger.info(
-        f"MCP ツール実行開始 (max_steps={max_steps}): {task_text[:100]}..."
+        f"MCP ツール実行開始 (max_steps={max_steps}, url={url}): {task_text[:100]}..."
     )
 
     try:
-        result_text = await run_task(task=task_text, max_steps=max_steps)
+        result_text = await run_task(
+            task=task_text, max_steps=max_steps, url=url
+        )
         logger.info(f"MCP ツール実行完了: 成功")
         return str(result_text)
     except Exception as e:
@@ -372,6 +388,88 @@ async def get_full_screenshot_tool(
         return Image(data=error_msg.encode('utf-8'), format="txt")
 
 
+# JavaScript 実行ツール
+@server.tool(
+    name="run_javascript_in_browser",
+    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL で JavaScript を実行します。
+
+このツールは Browser_bot (Chrome) に Playwright を使用して接続し、指定された JavaScript コードを実行します。
+
+URL が指定された場合:
+- 指定された URL に移動してから JavaScript を実行
+- ページの読み込みが完了してから実行
+
+使用用途:
+- 開発したページでの JavaScript 動作確認
+- DOM 操作やイベント発火などの自動化
+- ページ状態の動的な変更
+- 複雑な操作の自動化（browser_use では困難な場合）
+
+注意:
+- 実行結果は返されません（void）
+- エラーが発生した場合はログに記録されます
+""",
+)
+async def run_javascript_in_browser(
+    script: Annotated[
+        str,
+        Field(
+            description=(
+                "実行する JavaScript コード。\n"
+                "ブラウザのコンソールで実行されるのと同じように動作します。\n"
+                "\n"
+                "例:\n"
+                "- DOM 操作: document.getElementById('submit').click()\n"
+                "- フォーム入力: document.querySelector('input[name=\"email\"]')."
+                "value = 'test@example.com'\n"
+                "- スクロール: window.scrollTo(0, document.body.scrollHeight)\n"
+                "- イベント発火: document.querySelector('.button')."
+                "dispatchEvent(new Event('click'))\n"
+                "- 複数行の処理も可能（セミコロンで区切る）"
+            ),
+            min_length=1,
+            max_length=10000,
+            examples=[
+                "document.getElementById('login-button').click()",
+                "document.querySelector('input[type=\"email\"]').value = "
+                "'user@example.com'; "
+                "document.querySelector('input[type=\"password\"]').value = "
+                "'password123'; document.querySelector('form').submit()",
+                "Array.from(document.querySelectorAll('.item')).forEach(el => "
+                "el.style.backgroundColor = 'yellow')",
+                "window.scrollTo(0, 0); setTimeout(() => window.print(), 1000)",
+            ],
+        ),
+    ],
+    url: Annotated[
+        str | None,
+        Field(
+            description=(
+                "JavaScript を実行する URL。\n"
+                "指定された場合、その URL に移動してから JavaScript を実行します。\n"
+                "指定されない場合は、現在アクティブなページで実行します。"
+            ),
+            examples=["https://example.com", "https://github.com", None],
+        ),
+    ] = None,
+) -> str:
+    """指定された JavaScript をブラウザで実行する"""
+    logger.info(f"JavaScript 実行ツール開始 (URL: {url})")
+
+    try:
+        # run_script を実行（戻り値なし）
+        await run_script(script=script, url=url)
+
+        success_msg = "✅ JavaScript の実行が完了しました"
+        logger.info(success_msg)
+        return success_msg
+
+    except Exception as e:
+        error_msg = f"❌ エラー: JavaScript 実行中に予期しないエラーが発生しました: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
 # Chrome 起動ツール
 @server.tool(
     name="launch_chrome_with_debug",
@@ -547,7 +645,9 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("MCP サーバーを終了します (KeyboardInterrupt)")
     except Exception as e:
-        logger.error(f"MCP サーバーエラー: {e}", exc_info=True)
+        logger.error(
+            f"MCP サーバーエラー: {e.__class__.__name__}: {e}", exc_info=True
+        )
         raise
 
 
