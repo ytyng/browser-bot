@@ -10,6 +10,8 @@ BrowserUse を使用する MCP サーバーの実装
     - Chrome が --remote-debugging-port=9222 で起動していること
     - 必要な環境変数が設定されていること (OPENAI_API_KEY など)
 """
+from logging_config import logger
+
 import asyncio
 import os
 import platform
@@ -32,13 +34,10 @@ from browser_bot import (
     get_full_screenshot,
     get_page_source,
     get_visible_screenshot,
-    logger,
     run_script,
     run_task,
-    setup_logger_for_mcp_server,
 )
 
-setup_logger_for_mcp_server()
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
