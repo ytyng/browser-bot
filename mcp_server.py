@@ -394,6 +394,10 @@ async def get_full_screenshot_tool(
 
 このツールは Browser_bot (Chrome) に Playwright を使用して接続し、指定された JavaScript コードを実行します。
 
+実行方法:
+- 渡された JavaScript コードは自動的に async 即時関数 (async function() { ... })() でラップされて実行されます
+- そのため、await を使用した非同期処理も記述できます
+
 URL が指定された場合:
 - 指定された URL に移動してから JavaScript を実行
 - ページの読み込みが完了してから実行

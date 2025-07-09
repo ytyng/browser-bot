@@ -504,9 +504,7 @@ async def run_script(*, script: str, url: str | None = None):
         None
     """
     logger.info("JavaScript スクリプト実行開始")
-    logger.debug(
-        f"スクリプト内容: {script[:200]}..."
-    )  # 最初の200文字のみログに記録
+    logger.debug(f"スクリプト内容: {script}...")
 
     if url:
         logger.info(f"指定 URL: {url}")
@@ -557,7 +555,9 @@ async def run_script(*, script: str, url: str | None = None):
 
             # JavaScript を実行
             try:
-                result = await page.evaluate(script)
+                # スクリプトを async function で囲って実行
+                wrapped_script = f"(async function() {{\n{script}\n}})();"
+                result = await page.evaluate(wrapped_script)
                 logger.info("✅ JavaScript スクリプト実行完了")
 
                 # 実行結果をログに記録（結果が大きい場合は切り詰める）
@@ -623,6 +623,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # --script フラグがある場合は JavaScript として実行
+    # JavaScript コードは自動的に async 即時関数でラップされて実行される
     if args.script:
         asyncio.run(run_script(script=task, url=args.url))
     else:
