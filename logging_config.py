@@ -4,7 +4,7 @@ import logging
 import os
 
 # ファイルハンドラーの設定
-log_file = '/tmp/browser_bot.log'
+log_file = '/tmp/browser-bot.log'
 file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
 file_handler.setFormatter(
     logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from logging_config import logger
-
 import argparse
 import asyncio
 import os
 import sys
+
+from logging_config import logger
 
 # テレメトリを無効化
 os.environ['ANONYMIZED_TELEMETRY'] = 'false'
@@ -501,7 +501,7 @@ async def run_script(*, script: str, url: str | None = None):
         url: 指定されたらその URL に移動してから実行
 
     Returns:
-        None
+        JavaScript の実行結果
     """
     logger.info("JavaScript スクリプト実行開始")
     logger.debug(f"スクリプト内容: {script}...")
@@ -521,25 +521,25 @@ async def run_script(*, script: str, url: str | None = None):
                     "launch-chrome.sh を実行してから再度お試しください。"
                 )
                 logger.error(error_msg)
-                return
+                return None
     except httpx.ConnectError:
         error_msg = (
             "❌ エラー: Chrome が :9222 で起動していません。"
             "launch-chrome.sh を実行してから再度お試しください。"
         )
         logger.error(error_msg)
-        return
+        return None
     except httpx.TimeoutException:
         error_msg = "❌ エラー: Chrome への接続がタイムアウトしました。Chrome が正常に起動しているか確認してください。"
         logger.error(error_msg)
-        return
+        return None
     except Exception as e:
         error_msg = (
             f"❌ エラー: Chrome の起動確認中に予期しないエラーが発生しました: "
             f"{e.__class__.__name__}: {e}"
         )
         logger.error(error_msg)
-        return
+        return None
 
     logger.info("✅ Chrome が :9222 で起動していることを確認しました。")
 
@@ -547,7 +547,7 @@ async def run_script(*, script: str, url: str | None = None):
         page, browser, error = await _get_active_page(p, url=url)
         if error:
             logger.error(f"ページ取得エラー: {error}")
-            return
+            return None
 
         try:
             # ページが完全に読み込まれるまで待機
@@ -556,9 +556,11 @@ async def run_script(*, script: str, url: str | None = None):
             # JavaScript を実行
             try:
                 # スクリプトを async function で囲って実行
-                wrapped_script = f"(async function() {{\n{script}\n}})();"
+                wrapped_script = f"(async () => {{\n{script}\n}})();"
                 result = await page.evaluate(wrapped_script)
-                logger.info("✅ JavaScript スクリプト実行完了")
+                logger.info(
+                    f"✅ JavaScript スクリプト実行完了: result={result}"
+                )
 
                 # 実行結果をログに記録（結果が大きい場合は切り詰める）
                 if result is not None:
@@ -568,16 +570,20 @@ async def run_script(*, script: str, url: str | None = None):
                     else:
                         logger.debug(f"実行結果: {result_str}")
 
+                return result
+
             except Exception as e:
                 error_msg = (
                     f"❌ JavaScript 実行中にエラーが発生しました: "
                     f"{e.__class__.__name__}: {e}"
                 )
                 logger.error(error_msg, exc_info=True)
+                return None
 
         except Exception as e:
             error_msg = f"❌ スクリプト実行中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
             logger.error(error_msg, exc_info=True)
+            return None
 
         finally:
             await browser.close()
@@ -625,7 +631,9 @@ if __name__ == '__main__':
     # --script フラグがある場合は JavaScript として実行
     # JavaScript コードは自動的に async 即時関数でラップされて実行される
     if args.script:
-        asyncio.run(run_script(script=task, url=args.url))
+        result = asyncio.run(run_script(script=task, url=args.url))
+        if result is not None:
+            print(result)
     else:
         # 通常のタスクとして実行
         asyncio.run(

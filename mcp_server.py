@@ -10,8 +10,6 @@ BrowserUse を使用する MCP サーバーの実装
     - Chrome が --remote-debugging-port=9222 で起動していること
     - 必要な環境変数が設定されていること (OPENAI_API_KEY など)
 """
-from logging_config import logger
-
 import asyncio
 import os
 import platform
@@ -21,6 +19,8 @@ import sys
 from typing import Annotated
 
 import httpx
+
+from logging_config import logger
 
 # テレメトリを無効化
 os.environ['ANONYMIZED_TELEMETRY'] = 'false'
@@ -37,7 +37,6 @@ from browser_bot import (
     run_script,
     run_task,
 )
-
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
@@ -395,8 +394,9 @@ async def get_full_screenshot_tool(
 このツールは Browser_bot (Chrome) に Playwright を使用して接続し、指定された JavaScript コードを実行します。
 
 実行方法:
-- 渡された JavaScript コードは自動的に async 即時関数 (async function() { ... })() でラップされて実行されます
+- 渡された JavaScript コードは自動的に async 即時関数 (async () => { ... })() でラップされて実行されます
 - そのため、await を使用した非同期処理も記述できます
+- return 文を使用すると、実行結果を取得することができます
 
 URL が指定された場合:
 - 指定された URL に移動してから JavaScript を実行
@@ -409,8 +409,14 @@ URL が指定された場合:
 - 複雑な操作の自動化（browser_use では困難な場合）
 
 注意:
-- 実行結果は返されません（void）
-- エラーが発生した場合はログに記録されます
+- エラーが発生した場合は、ローカルコンピューターの /tmp/browser-bot.log に記録されます。
+
+戻り値:
+正常終了した場合は、 {
+    "message": "✅ JavaScript の実行が完了しました",
+    "result": 実行結果
+}
+が返されます。
 """,
 )
 async def run_javascript_in_browser(
@@ -420,6 +426,8 @@ async def run_javascript_in_browser(
             description=(
                 "実行する JavaScript コード。\n"
                 "ブラウザのコンソールで実行されるのと同じように動作します。\n"
+                "return 文を書くと、結果を取得できます。\n"
+                "内容は、`(async () => { ... })()` でラップされます。\n"
                 "\n"
                 "例:\n"
                 "- DOM 操作: document.getElementById('submit').click()\n"
@@ -460,12 +468,11 @@ async def run_javascript_in_browser(
     logger.info(f"JavaScript 実行ツール開始 (URL: {url})")
 
     try:
-        # run_script を実行（戻り値なし）
-        await run_script(script=script, url=url)
+        result = await run_script(script=script, url=url)
 
         success_msg = "✅ JavaScript の実行が完了しました"
-        logger.info(success_msg)
-        return success_msg
+        logger.info(f'{success_msg}: {result=}')
+        return {"message": success_msg, "result": result}
 
     except Exception as e:
         error_msg = f"❌ エラー: JavaScript 実行中に予期しないエラーが発生しました: {str(e)}"
