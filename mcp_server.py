@@ -31,11 +31,13 @@ from fastmcp.utilities.types import Image
 from pydantic import Field
 
 from browser_bot import (
+    get_current_url,
     get_full_screenshot,
     get_page_source,
     get_visible_screenshot,
     run_script,
     run_task,
+    super_reload,
 )
 
 # .envファイルから環境変数を読み込む
@@ -476,6 +478,116 @@ async def run_javascript_in_browser(
 
     except Exception as e:
         error_msg = f"❌ エラー: JavaScript 実行中に予期しないエラーが発生しました: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+# 現在の URL 取得ツール
+@server.tool(
+    name="get_current_url",
+    description="""Browser_bot (Chrome) の現在アクティブなタブの URL を取得します。
+
+このツールは Browser_bot (Chrome) に Playwright を使用して接続し、以下の情報を取得します:
+- 現在の URL
+- ページタイトル
+
+使用用途:
+- 現在のページ状況の確認
+- ページ遷移後の確認
+- デバッグ用の状態取得
+""",
+)
+async def get_current_url_tool() -> str:
+    """現在アクティブなタブの URL を取得する"""
+    logger.info("現在の URL 取得ツール実行開始")
+
+    try:
+        result = await get_current_url()
+
+        if 'error' in result:
+            logger.error(f"URL 取得エラー: {result['error']}")
+            return result['error']
+
+        # 結果を整形して返す
+        response = f"""# 現在のページ情報
+
+## URL
+
+{result['url']}
+
+## タイトル
+
+{result['title']}
+"""
+
+        logger.info(f"現在の URL 取得ツール実行完了: {result['url']}")
+        return response
+
+    except Exception as e:
+        error_msg = (
+            f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {str(e)}"
+        )
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+# スーパーリロードツール
+@server.tool(
+    name="super_reload",
+    description="""Browser_bot (Chrome) の現在アクティブなタブでスーパーリロード (キャッシュを無視してリロード) を実行します。
+
+このツールは Browser_bot (Chrome) に Playwright を使用して接続し、スーパーリロードを実行します。
+
+URL が指定された場合:
+- 指定された URL に移動してからスーパーリロード
+
+使用用途:
+- キャッシュを無視した最新のページ取得
+- 開発中のページの強制更新
+- JavaScript やCSS の変更を反映させたい場合
+""",
+)
+async def super_reload_tool(
+    url: Annotated[
+        str | None,
+        Field(
+            description=(
+                "スーパーリロードする URL。指定された場合、その URL に移動してからスーパーリロードします。\n"
+                "指定されない場合は、現在のページでスーパーリロードを実行します。"
+            ),
+            examples=["https://example.com", "https://github.com"],
+        ),
+    ] = None,
+) -> str:
+    """現在アクティブなタブまたは指定された URL でスーパーリロードを実行する"""
+    logger.info(f"スーパーリロードツール実行開始 (URL: {url})")
+
+    try:
+        result = await super_reload(url=url)
+
+        if 'error' in result:
+            logger.error(f"スーパーリロードエラー: {result['error']}")
+            return result['error']
+
+        # 結果を整形して返す
+        response = f"""# スーパーリロード完了
+
+## URL
+
+{result['url']}
+
+## タイトル
+
+{result['title']}
+
+✅ キャッシュを無視してページを再読み込みしました。
+"""
+
+        logger.info(f"スーパーリロードツール実行完了: {result['url']}")
+        return response
+
+    except Exception as e:
+        error_msg = f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: {str(e)}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 

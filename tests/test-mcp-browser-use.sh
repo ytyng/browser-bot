@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# 利用可能なツール一覧を取得
+# browser_use ツールのテスト（簡単なタスク）
 
 cd $(dirname $0)/../
 
@@ -8,6 +8,5 @@ cd $(dirname $0)/../
     sleep 0.5
     echo '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
     sleep 0.5
-    echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}'
-    sleep 0.5
+    echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "browser_use_local_chrome", "arguments": {"task_text": "現在のページのタイトルを確認してください", "max_steps": 3}}}'
 } | ./launch-mcp-server.sh

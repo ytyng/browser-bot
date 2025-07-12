@@ -166,7 +166,7 @@ browser-bot/
 
 すべてのログは以下のファイルに記録されます：
 
-- **ログファイル**: `/tmp/browser_bot.log`
+- **ログファイル**: `/tmp/browser-bot.log`
 
 注意: MCP サーバーでは stdout にログを出力しません（stdio 通信を妨げるため）
 
@@ -204,7 +204,7 @@ browser-bot/
 
 1. `.env` ファイルに `OPENAI_API_KEY` が設定されているか確認
 2. Chrome がデバッグポート付きで起動しているか確認
-3. ログファイル (`/tmp/browser_bot.log`) を確認
+3. ログファイル (`/tmp/browser-bot.log`) を確認
 
 ### 操作が途中で止まる
 

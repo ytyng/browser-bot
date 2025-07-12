@@ -492,6 +492,121 @@ async def get_full_screenshot(*, url: str | None = None):
             await browser.close()
 
 
+async def get_current_url():
+    """
+    現在アクティブなタブの URL を取得する
+
+    Returns:
+        dict: {
+            'url': str,     # 現在のURL
+            'title': str    # ページタイトル
+        }
+    """
+    logger.info("現在の URL 取得開始")
+
+    try:
+        # Chrome の DevTools Protocol を使って直接取得
+        async with httpx.AsyncClient() as client:
+            # タブ一覧を取得
+            tabs_response = await client.get('http://localhost:9222/json')
+            tabs = tabs_response.json()
+
+            if not tabs:
+                return {'error': 'アクティブなタブが見つかりません'}
+
+            # 最初のタブの情報を取得
+            active_tab = tabs[0]
+            url = active_tab.get('url', 'Unknown')
+            title = active_tab.get('title', 'Unknown')
+
+            logger.info(f"現在の URL 取得完了: {url}")
+            return {'url': url, 'title': title}
+
+    except Exception as e:
+        error_msg = f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        return {'error': error_msg}
+
+
+async def super_reload(*, url: str | None = None):
+    """
+    現在アクティブなタブでスーパーリロード (Ctrl+Shift+R) を実行する
+
+    Args:
+        url: 指定されたらその URL に移動してからスーパーリロード
+
+    Returns:
+        dict: {
+            'url': str,     # リロード後のURL
+            'title': str    # ページタイトル
+        }
+    """
+    logger.info("スーパーリロード開始")
+
+    try:
+        # Chrome の DevTools Protocol を使って直接操作
+        async with httpx.AsyncClient() as client:
+            # タブ一覧を取得
+            tabs_response = await client.get('http://localhost:9222/json')
+            tabs = tabs_response.json()
+
+            if not tabs:
+                return {'error': 'アクティブなタブが見つかりません'}
+
+            # 最初のタブを取得
+            active_tab = tabs[0]
+            tab_id = active_tab['id']
+
+            # WebSocketエンドポイントURLを構築
+            ws_url = f"http://localhost:9222/json/runtime/evaluate"
+
+            # URL指定がある場合は先に移動
+            if url:
+                logger.info(f"指定 URL に移動: {url}")
+                navigate_payload = {
+                    "id": 1,
+                    "method": "Page.navigate",
+                    "params": {"url": url},
+                }
+                await client.post(
+                    f"http://localhost:9222/json/runtime/evaluate",
+                    json=navigate_payload,
+                    timeout=10,
+                )
+                await asyncio.sleep(2)  # 移動完了を待つ
+
+            # リロードを実行
+            reload_payload = {
+                "id": 2,
+                "method": "Page.reload",
+                "params": {"ignoreCache": True},
+            }
+            await client.post(
+                f"http://localhost:9222/json/runtime/evaluate",
+                json=reload_payload,
+                timeout=10,
+            )
+
+            # リロード完了を待つ
+            await asyncio.sleep(3)
+
+            # 最新の状態を取得
+            tabs_response = await client.get('http://localhost:9222/json')
+            tabs = tabs_response.json()
+            active_tab = tabs[0] if tabs else active_tab
+
+            current_url = active_tab.get('url', 'Unknown')
+            title = active_tab.get('title', 'Unknown')
+
+            logger.info(f"スーパーリロード完了: {current_url}")
+            return {'url': current_url, 'title': title}
+
+    except Exception as e:
+        error_msg = f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        return {'error': error_msg}
+
+
 async def run_script(*, script: str, url: str | None = None):
     """
     JavaScript を受け取って、Playwright を使ってブラウザ上でそのスクリプトを実行する

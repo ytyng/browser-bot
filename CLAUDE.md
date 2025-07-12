@@ -37,7 +37,7 @@ Browser Bot は Chrome ブラウザの自動操作を行う MCP (Model Context P
 
 ### 1. ログ設定
 
-- すべてのログは `/tmp/browser_bot.log` に記録
+- すべてのログは `/tmp/browser-bot.log` に記録
 - MCP サーバーでは stdout にログを出力しない（stdio 通信を妨げるため）
 - ログレベルは環境変数 `BROWSER_USE_LOGGING_LEVEL=result` で制御
 
@@ -134,7 +134,7 @@ cat .env  # OPENAI_API_KEY または GOOGLE_API_KEY が設定されているこ�
 
 ```bash
 # リアルタイムログ監視
-tail -f /tmp/browser_bot.log
+tail -f /tmp/browser-bot.log
 ```
 
 ### 2. Chrome デバッグ

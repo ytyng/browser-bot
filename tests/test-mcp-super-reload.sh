@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# 利用可能なツール一覧を取得
+# スーパーリロードツールのテスト
 
 cd $(dirname $0)/../
 
@@ -8,6 +8,6 @@ cd $(dirname $0)/../
     sleep 0.5
     echo '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
     sleep 0.5
-    echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}'
+    echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "super_reload", "arguments": {}}}'
     sleep 0.5
 } | ./launch-mcp-server.sh

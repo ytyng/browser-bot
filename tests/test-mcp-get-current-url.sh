@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# 利用可能なツール一覧を取得
+# 現在のページURL取得ツールのテスト
 
 cd $(dirname $0)/../
 
@@ -8,6 +8,6 @@ cd $(dirname $0)/../
     sleep 0.5
     echo '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
     sleep 0.5
-    echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}'
-    sleep 0.5
+    echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_current_url", "arguments": {}}}'
+    sleep 1
 } | ./launch-mcp-server.sh
