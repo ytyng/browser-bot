@@ -19,6 +19,48 @@ from PIL import Image
 from playwright.async_api import async_playwright
 
 
+async def _check_chrome_running():
+    """
+    Chrome が :9222 で起動しているかを確認する共通処理
+
+    Returns:
+        str | None: エラーメッセージ、または None（正常時）
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                'http://localhost:9222/json/version', timeout=5.0
+            )
+            if response.status_code != 200:
+                error_msg = (
+                    "❌ エラー: Chrome が :9222 で起動していません。"
+                    "launch-chrome.sh を実行してから再度お試しください。"
+                )
+                logger.error(error_msg)
+                return error_msg
+    except httpx.ConnectError:
+        error_msg = (
+            "❌ エラー: Chrome が :9222 で起動していません。"
+            "launch-chrome.sh を実行してから再度お試しください。"
+        )
+        logger.error(error_msg)
+        return error_msg
+    except httpx.TimeoutException:
+        error_msg = "❌ エラー: Chrome への接続がタイムアウトしました。Chrome が正常に起動しているか確認してください。"
+        logger.error(error_msg)
+        return error_msg
+    except Exception as e:
+        error_msg = (
+            f"❌ エラー: Chrome の起動確認中に予期しないエラーが発生しました: "
+            f"{e.__class__.__name__}: {e}"
+        )
+        logger.error(error_msg)
+        return error_msg
+
+    logger.info("✅ Chrome が :9222 で起動していることを確認しました。")
+    return None
+
+
 # LLM モデルを取得する関数
 def get_llm():
 
@@ -64,38 +106,9 @@ async def run_task(
     logger.debug(f"max_steps: {max_steps}")
 
     # Chrome が :9222 で起動しているか確認
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                'http://localhost:9222/json/version', timeout=5.0
-            )
-            if response.status_code != 200:
-                error_msg = (
-                    "❌ エラー: Chrome が :9222 で起動していません。"
-                    "launch-chrome.sh を実行してから再度お試しください。"
-                )
-                logger.error(error_msg)
-                return error_msg
-    except httpx.ConnectError:
-        error_msg = (
-            "❌ エラー: Chrome が :9222 で起動していません。"
-            "launch-chrome.sh を実行してから再度お試しください。"
-        )
-        logger.error(error_msg)
-        return error_msg
-    except httpx.TimeoutException:
-        error_msg = "❌ エラー: Chrome への接続がタイムアウトしました。Chrome が正常に起動しているか確認してください。"
-        logger.error(error_msg)
-        return error_msg
-    except Exception as e:
-        error_msg = (
-            f"❌ エラー: Chrome の起動確認中に予期しないエラーが発生しました: "
-            f"{e.__class__.__name__}: {e}"
-        )
-        logger.error(error_msg)
-        return error_msg
-
-    logger.info("✅ Chrome が :9222 で起動していることを確認しました。")
+    chrome_check_error = await _check_chrome_running()
+    if chrome_check_error:
+        return chrome_check_error
 
     # 既存の Chrome に接続
     browser_session = BrowserSession(cdp_url='http://localhost:9222')
@@ -625,38 +638,9 @@ async def run_script(*, script: str, url: str | None = None):
         logger.info(f"指定 URL: {url}")
 
     # Chrome が :9222 で起動しているか確認
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                'http://localhost:9222/json/version', timeout=5.0
-            )
-            if response.status_code != 200:
-                error_msg = (
-                    "❌ エラー: Chrome が :9222 で起動していません。"
-                    "launch-chrome.sh を実行してから再度お試しください。"
-                )
-                logger.error(error_msg)
-                return None
-    except httpx.ConnectError:
-        error_msg = (
-            "❌ エラー: Chrome が :9222 で起動していません。"
-            "launch-chrome.sh を実行してから再度お試しください。"
-        )
-        logger.error(error_msg)
+    chrome_check_error = await _check_chrome_running()
+    if chrome_check_error:
         return None
-    except httpx.TimeoutException:
-        error_msg = "❌ エラー: Chrome への接続がタイムアウトしました。Chrome が正常に起動しているか確認してください。"
-        logger.error(error_msg)
-        return None
-    except Exception as e:
-        error_msg = (
-            f"❌ エラー: Chrome の起動確認中に予期しないエラーが発生しました: "
-            f"{e.__class__.__name__}: {e}"
-        )
-        logger.error(error_msg)
-        return None
-
-    logger.info("✅ Chrome が :9222 で起動していることを確認しました。")
 
     async with async_playwright() as p:
         page, browser, error = await _get_active_page(p, url=url)
