@@ -210,3 +210,18 @@ browser-bot/
 
 - `max_steps` パラメーターを増やしてみてください
 - タスクの内容をより具体的に記述してください
+
+### スーパーリロードが期待通りに動作しない
+
+Browser Bot では複数の方法でスーパーリロード（キャッシュ無視のリロード）を実装しています：
+
+1. **super_reload**: 3段階のフォールバック方式
+   - Chrome DevTools Protocol (CDP) を使用（最も確実）
+   - キーボードショートカット（Ctrl+Shift+R / Cmd+Shift+R）
+   - 通常のリロード（フォールバック）
+
+2. **force_reload_with_javascript**: JavaScript による強制リロード
+   - `location.reload(true)` を使用
+   - キャッシュバスティング用のタイムスタンプ付きリロード
+
+いずれかの方法で確実にキャッシュをクリアできます。

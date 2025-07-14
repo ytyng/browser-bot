@@ -556,12 +556,24 @@ async def super_reload_tool(
             examples=["https://example.com", "https://github.com"],
         ),
     ] = None,
+    mode: Annotated[
+        str,
+        Field(
+            description=(
+                "スーパーリロードのモード。通常、指定する必要は無し。\n"
+                "cdp: Chrome DevTools Protocol を使用してスーパーリロード(default)、\n"
+                "javascript: JavaScript を使用してスーパーリロード。\n"
+                "keyboard: キーボードショートカット (Ctrl+F5) を使用してスーパーリロード。\n"
+            ),
+            examples=["cdp", "javascript", "keyboard"],
+        ),
+    ] = "cdp",
 ) -> str:
     """現在アクティブなタブまたは指定された URL でスーパーリロードを実行する"""
     logger.info(f"スーパーリロードツール実行開始 (URL: {url})")
 
     try:
-        result = await super_reload(url=url)
+        result = await super_reload(url=url, mode=mode)
 
         if 'error' in result:
             logger.error(f"スーパーリロードエラー: {result['error']}")

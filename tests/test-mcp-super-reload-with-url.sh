@@ -14,3 +14,5 @@ TEST_URL="https://httpbin.org/html"
     echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "super_reload", "arguments": {"url": "'$TEST_URL'"}}}'
     sleep 0.5
 } | ./launch-mcp-server.sh
+
+# 終了時に anyio.ClosedResourceError が出るが気にしない

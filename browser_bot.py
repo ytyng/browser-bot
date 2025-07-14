@@ -554,12 +554,14 @@ async def get_current_url():
         raise BrowserBotTaskFailedError(error_msg)
 
 
-async def super_reload(*, url: str | None = None):
+async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
     """
-    現在アクティブなタブでスーパーリロード (Ctrl+Shift+R) を実行する
+    現在アクティブなタブでスーパーリロードを実行する
 
     Args:
         url: 指定されたらその URL に移動してからスーパーリロード
+        mode: リロード方法 ('cdp', 'javascript', 'keyboard')
+            デフォルト = cdp
 
     Returns:
         dict: {
@@ -569,66 +571,149 @@ async def super_reload(*, url: str | None = None):
     """
     logger.info("スーパーリロード開始")
 
-    try:
-        # Chrome の DevTools Protocol を使って直接操作
-        async with httpx.AsyncClient() as client:
-            # タブ一覧を取得
-            tabs_response = await client.get('http://localhost:9222/json')
-            tabs = tabs_response.json()
+    # Chrome が :9222 で起動しているか確認
+    await _check_chrome_running()
 
-            if not tabs:
-                raise BrowserBotTaskAbortedError(
-                    'アクティブなタブが見つかりません'
-                )
+    async with async_playwright() as p:
+        page, browser = await _get_active_page(p, url=url)
 
-            # 最初のタブを取得
-            active_tab = tabs[0]
+        try:
+            # 現在の URL を保存
+            current_url = page.url if not url else url
 
-            # URL指定がある場合は先に移動
-            if url:
+            # URL が指定されていて、現在のURLと異なる場合は移動
+            if url and page.url != url:
                 logger.info(f"指定 URL に移動: {url}")
-                navigate_payload = {
-                    "id": 1,
-                    "method": "Page.navigate",
-                    "params": {"url": url},
-                }
-                await client.post(
-                    f"http://localhost:9222/json/runtime/evaluate",
-                    json=navigate_payload,
-                    timeout=10,
-                )
-                await asyncio.sleep(2)  # 移動完了を待つ
+                await page.goto(url)
+                await page.wait_for_load_state('networkidle')
 
-            # リロードを実行
-            reload_payload = {
-                "id": 2,
-                "method": "Page.reload",
-                "params": {"ignoreCache": True},
-            }
-            await client.post(
-                f"http://localhost:9222/json/runtime/evaluate",
-                json=reload_payload,
-                timeout=10,
-            )
+            # Playwright の reload メソッドでキャッシュを無視してリロード
+            logger.info(f"スーパーリロード実行中: {current_url}, {mode=}")
+
+            if mode == 'javascript':
+                # JavaScript を使ってスーパーリロード
+                await _super_reload_with_javascript(page)
+            elif mode == 'keyboard':
+                # キーボードショートカットを使ってスーパーリロード
+                await _super_reload_with_keyboard(page)
+            else:
+                # CDP (Chrome DevTools Protocol) を使ってスーパーリロード
+                await _super_reload_with_cdp(page)
 
             # リロード完了を待つ
-            await asyncio.sleep(3)
+            await page.wait_for_load_state('networkidle')
 
-            # 最新の状態を取得
-            tabs_response = await client.get('http://localhost:9222/json')
-            tabs = tabs_response.json()
-            active_tab = tabs[0] if tabs else active_tab
+            # タイトルを取得
+            try:
+                title = await page.title()
+            except Exception:
+                title = "Unknown"
+                logger.warning("タイトル取得に失敗しました")
 
-            current_url = active_tab.get('url', 'Unknown')
-            title = active_tab.get('title', 'Unknown')
+            final_url = page.url
+            logger.info(f"スーパーリロード完了: {final_url}")
 
-            logger.info(f"スーパーリロード完了: {current_url}")
-            return {'url': current_url, 'title': title}
+            return {'url': final_url, 'title': title}
 
+        except Exception as e:
+            error_msg = (
+                f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: "
+                f"{e.__class__.__name__}: {e}"
+            )
+            logger.error(error_msg, exc_info=True)
+            raise BrowserBotTaskFailedError(error_msg)
+
+        finally:
+            await browser.close()
+
+
+async def _super_reload_with_cdp(page):
+    """
+    CDP (Chrome DevTools Protocol) を使用してスーパーリロードを実行する
+
+    Args:
+        page: Playwright のページオブジェクト
+
+    Returns:
+        None
+    """
+    try:
+        cdp_session = await page.context.new_cdp_session(page)
+        await cdp_session.send('Page.reload', {'ignoreCache': True})
+        logger.info("CDP を使用してスーパーリロードを実行しました")
     except Exception as e:
-        error_msg = f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
-        logger.error(error_msg, exc_info=True)
-        raise BrowserBotTaskFailedError(error_msg)
+        logger.error(f"CDP リロードエラー: {e.__class__.__name__}: {e}")
+        raise BrowserBotTaskFailedError(f"CDP リロードエラー: {e}")
+
+
+async def _super_reload_with_keyboard(page):
+    """
+    キーボードショートカットを使用してスーパーリロードを実行する
+
+    Args:
+        page: Playwright のページオブジェクト
+
+    Returns:
+        None
+    """
+    try:
+        import platform
+
+        if platform.system() == 'Darwin':  # macOS
+            await page.keyboard.down('Meta')
+            await page.keyboard.down('Shift')
+            await page.keyboard.press('R')
+            await page.keyboard.up('Shift')
+            await page.keyboard.up('Meta')
+        else:  # Windows/Linux
+            await page.keyboard.down('Control')
+            await page.keyboard.down('Shift')
+            await page.keyboard.press('R')
+            await page.keyboard.up('Shift')
+            await page.keyboard.up('Control')
+
+        logger.info("キーボードショートカットでスーパーリロードを実行しました")
+    except Exception as e:
+        logger.error(
+            f"キーボードショートカットリロードエラー: {e.__class__.__name__}: {e}"
+        )
+        raise BrowserBotTaskFailedError(
+            f"キーボードショートカットリロードエラー: {e}"
+        )
+
+
+async def _super_reload_with_javascript(page):
+    """
+    JavaScript を使用してスーパーリロードを実行する
+
+    Args:
+        page: Playwright のページオブジェクト
+
+    Returns:
+        None
+    """
+    try:
+        await page.evaluate(
+            """
+            () => {
+                // location.reload(true) は deprecated だが、多くのブラウザでまだ動作する
+                if (typeof location.reload === 'function') {
+                    try {
+                        location.reload(true);
+                    } catch (e) {
+                        // 方法2: キャッシュバスティング用のタイムスタンプを追加
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('_t', Date.now().toString());
+                        window.location.href = url.toString();
+                    }
+                }
+            }
+        """
+        )
+        logger.info("JavaScript でスーパーリロードを実行しました")
+    except Exception as e:
+        logger.error(f"JavaScript リロードエラー: {e.__class__.__name__}: {e}")
+        raise BrowserBotTaskFailedError(f"JavaScript リロードエラー: {e}")
 
 
 async def run_script(*, script: str, url: str | None = None):
