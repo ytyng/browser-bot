@@ -16,6 +16,7 @@ import dotenv
 import httpx
 from browser_use import Agent, BrowserSession
 from PIL import Image
+from playwright._impl._errors import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 
@@ -39,6 +40,45 @@ class BrowserRuntimeError(BrowserBotError):
     """Chrome が起動していない場合に raise する例外"""
 
     pass
+
+
+async def _page_wait_for_load_state(
+    page, state='domcontentloaded', timeout=7000
+):
+    """
+    ページのロード状態を段階的にフォールバックしながら待機する共通関数
+
+    Args:
+        page: Playwright の Page オブジェクト
+        state: 待機するロード状態（'networkidle', 'domcontentloaded', 'load'）
+        timeout: タイムアウト時間（ミリ秒）
+
+    Returns:
+        str: 実際に使用されたロード状態
+    """
+    try:
+        await page.wait_for_load_state(state, timeout=timeout)
+        logger.debug(f"ロード状態 '{state}' で完了")
+        return state
+    except PlaywrightTimeoutError as e:
+        logger.warning(f"ロード状態 '{state}' の待機がタイムアウト: {e}")
+
+        # networkidle に失敗した場合は domcontentloaded を試行
+        if state == 'networkidle':
+            try:
+                await page.wait_for_load_state(
+                    'domcontentloaded', timeout=5000
+                )
+                logger.debug("DOM読み込み完了状態で続行")
+                return 'domcontentloaded'
+            except PlaywrightTimeoutError as e2:
+                logger.warning(f"DOM読み込み待機もタイムアウト: {e2}")
+                logger.debug("ロード状態の待機をスキップして続行")
+                return 'skipped'
+
+        # その他の状態に失敗した場合はスキップ
+        logger.debug(f"ロード状態 '{state}' の待機をスキップして続行")
+        return 'skipped'
 
 
 async def _check_chrome_running():
@@ -142,8 +182,11 @@ async def run_task(
             page = await browser_session.get_current_page()
             # URL に遷移
             await page.goto(url)
-            await page.wait_for_load_state('networkidle')
-            logger.info(f"✅ {url} への遷移完了")
+            load_state = await _page_wait_for_load_state(page)
+            if load_state == 'skipped':
+                logger.info(f"✅ {url} への遷移を続行")
+            else:
+                logger.info(f"✅ {url} への遷移完了（{load_state}）")
         except Exception as e:
             logger.warning(
                 f"URL への遷移中にエラー: {e.__class__.__name__}: {e}"
@@ -229,7 +272,8 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
         if url:
             logger.info(f"URL に遷移: {url}")
             await active_page.goto(url)
-            await active_page.wait_for_load_state('networkidle')
+            # ページのロード状態を待機
+            await _page_wait_for_load_state(active_page)
 
         return active_page, browser
 
@@ -398,7 +442,7 @@ async def get_page_source(*, url: str | None = None):
             current_url = page.url
 
             # ページが完全に読み込まれるまで待機
-            await page.wait_for_load_state('domcontentloaded')
+            await _page_wait_for_load_state(page)
 
             # タイトルとソースコードを取得
             try:
@@ -416,12 +460,16 @@ async def get_page_source(*, url: str | None = None):
             await browser.close()
 
 
-async def get_visible_screenshot(*, url: str | None = None):
+async def get_visible_screenshot(
+    *, url: str | None = None, page_y_offset_as_viewport_height: float = 0.0
+):
     """
     現在アクティブなタブの表示されている箇所をスクリーンショットする
 
     Args:
         url: 指定されたらその URL に移動してから取得
+        page_y_offset_as_viewport_height: ビューポートの高さを基準にした
+            スクロール量の倍率。1.0 で 1 ページ分下にスクロール
 
     Returns:
         dict: {
@@ -430,7 +478,10 @@ async def get_visible_screenshot(*, url: str | None = None):
             'title': str         # ページタイトル
         }
     """
-    logger.info("表示箇所のスクリーンショット取得開始")
+    logger.info(
+        f"表示箇所のスクリーンショット取得開始 "
+        f"(スクロール倍率: {page_y_offset_as_viewport_height})"
+    )
 
     async with async_playwright() as p:
         page, browser = await _get_active_page(p, url=url)
@@ -440,7 +491,7 @@ async def get_visible_screenshot(*, url: str | None = None):
             current_url = page.url
 
             # ページが完全に読み込まれるまで待機
-            await page.wait_for_load_state('domcontentloaded')
+            await _page_wait_for_load_state(page)
 
             # タイトルを取得
             try:
@@ -448,6 +499,26 @@ async def get_visible_screenshot(*, url: str | None = None):
             except Exception:
                 title = "Unknown"
                 logger.warning("タイトル取得に失敗しました")
+
+            # スクロール処理
+            if page_y_offset_as_viewport_height > 0:
+                # ビューポートの高さを取得
+                viewport_height = await page.evaluate(
+                    "() => window.innerHeight"
+                )
+                # スクロール量を計算
+                scroll_y = int(
+                    viewport_height * page_y_offset_as_viewport_height
+                )
+                # スクロール実行
+                await page.evaluate(f"() => window.scrollBy(0, {scroll_y})")
+                # スクロール後の描画を待つ
+                await page.wait_for_timeout(500)
+                logger.info(
+                    f"ページをスクロールしました: {scroll_y}px "
+                    f"(ビューポート高さ {viewport_height}px の "
+                    f"{page_y_offset_as_viewport_height} 倍)"
+                )
 
             # 表示箇所のスクリーンショット取得
             screenshot_bytes = await page.screenshot()
@@ -490,7 +561,7 @@ async def get_full_screenshot(*, url: str | None = None):
             current_url = page.url
 
             # ページが完全に読み込まれるまで待機
-            await page.wait_for_load_state('domcontentloaded')
+            await _page_wait_for_load_state(page)
 
             # タイトルを取得
             try:
@@ -585,7 +656,7 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
             if url and page.url != url:
                 logger.info(f"指定 URL に移動: {url}")
                 await page.goto(url)
-                await page.wait_for_load_state('networkidle')
+                await _page_wait_for_load_state(page)
 
             # Playwright の reload メソッドでキャッシュを無視してリロード
             logger.info(f"スーパーリロード実行中: {current_url}, {mode=}")
@@ -601,7 +672,7 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
                 await _super_reload_with_cdp(page)
 
             # リロード完了を待つ
-            await page.wait_for_load_state('networkidle')
+            await _page_wait_for_load_state(page)
 
             # タイトルを取得
             try:
@@ -751,7 +822,7 @@ async def run_script(*, script: str, url: str | None = None):
 
         try:
             # ページが完全に読み込まれるまで待機
-            await page.wait_for_load_state('networkidle')
+            await _page_wait_for_load_state(page)
 
             # JavaScript を実行
             # スクリプトを async function で囲って実行
@@ -812,7 +883,7 @@ async def run_python_script(
         page, browser = await _get_active_page(p, url=url)
 
         # ページが完全に読み込まれるまで待機
-        await page.wait_for_load_state('networkidle')
+        await _page_wait_for_load_state(page)
 
         # page オブジェクトを利用可能にして Python スクリプトを実行
         local_vars = {'page': page, 'asyncio': asyncio}
@@ -892,7 +963,9 @@ if __name__ == '__main__':
     try:
         if args.python_script:
             # Playwright 用の Python スクリプトを実行
-            result = asyncio.run(run_python_script(script=task, url=args.url))
+            result = asyncio.run(
+                run_python_script(python_script_text=task, url=args.url)
+            )
             if result is not None:
                 print(result)
 

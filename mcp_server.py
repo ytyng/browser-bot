@@ -299,12 +299,33 @@ async def get_visible_screenshot_tool(
             examples=["https://example.com", "https://github.com"],
         ),
     ] = None,
+    page_y_offset_as_viewport_height: Annotated[
+        float,
+        Field(
+            description=(
+                "ビューポートの高さを基準にしたスクロール量の倍率。\n"
+                "0.0: スクロールしない（デフォルト）\n"
+                "1.0: 1ページ分下にスクロール\n"
+                "2.0: 2ページ分下にスクロール\n"
+                "例: 0.5 を指定すると半ページ分下にスクロールしてスクリーンショットを取得"
+            ),
+            ge=0.0,
+            le=10.0,
+            examples=[0.0, 1.0, 0.5, 2.0],
+        ),
+    ] = 0.0,
 ) -> Image:
     """現在表示されている箇所または指定された URL のスクリーンショットを取得する"""
-    logger.info(f"表示箇所のスクリーンショット取得ツール実行開始 (URL: {url})")
+    logger.info(
+        f"表示箇所のスクリーンショット取得ツール実行開始 "
+        f"(URL: {url}, スクロール倍率: {page_y_offset_as_viewport_height})"
+    )
 
     try:
-        result = await get_visible_screenshot(url=url)
+        result = await get_visible_screenshot(
+            url=url,
+            page_y_offset_as_viewport_height=page_y_offset_as_viewport_height,
+        )
 
         if 'error' in result:
             logger.error(f"スクリーンショット取得エラー: {result['error']}")
