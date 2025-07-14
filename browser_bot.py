@@ -19,6 +19,28 @@ from PIL import Image
 from playwright.async_api import async_playwright
 
 
+class BrowserBotError(Exception):
+    pass
+
+
+class BrowserBotTaskAbortedError(BrowserBotError):
+    """タスクが中断された場合に raise する例外"""
+
+    pass
+
+
+class BrowserBotTaskFailedError(BrowserBotError):
+    """タスクが失敗した場合に raise する例外"""
+
+    pass
+
+
+class BrowserRuntimeError(BrowserBotError):
+    """Chrome が起動していない場合に raise する例外"""
+
+    pass
+
+
 async def _check_chrome_running():
     """
     Chrome が :9222 で起動しているかを確認する共通処理
@@ -37,28 +59,27 @@ async def _check_chrome_running():
                     "launch-chrome.sh を実行してから再度お試しください。"
                 )
                 logger.error(error_msg)
-                return error_msg
+                raise BrowserRuntimeError(error_msg)
     except httpx.ConnectError:
         error_msg = (
             "❌ エラー: Chrome が :9222 で起動していません。"
             "launch-chrome.sh を実行してから再度お試しください。"
         )
         logger.error(error_msg)
-        return error_msg
+        raise BrowserRuntimeError(error_msg)
     except httpx.TimeoutException:
         error_msg = "❌ エラー: Chrome への接続がタイムアウトしました。Chrome が正常に起動しているか確認してください。"
         logger.error(error_msg)
-        return error_msg
+        raise BrowserRuntimeError(error_msg)
     except Exception as e:
         error_msg = (
             f"❌ エラー: Chrome の起動確認中に予期しないエラーが発生しました: "
             f"{e.__class__.__name__}: {e}"
         )
         logger.error(error_msg)
-        return error_msg
+        raise BrowserRuntimeError(error_msg)
 
     logger.info("✅ Chrome が :9222 で起動していることを確認しました。")
-    return None
 
 
 # LLM モデルを取得する関数
@@ -106,9 +127,7 @@ async def run_task(
     logger.debug(f"max_steps: {max_steps}")
 
     # Chrome が :9222 で起動しているか確認
-    chrome_check_error = await _check_chrome_running()
-    if chrome_check_error:
-        return chrome_check_error
+    await _check_chrome_running()
 
     # 既存の Chrome に接続
     browser_session = BrowserSession(cdp_url='http://localhost:9222')
@@ -147,7 +166,7 @@ async def run_task(
     except Exception as e:
         error_msg = f"❌ エラー: エージェント実行中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
-        return error_msg
+        raise BrowserBotTaskFailedError(error_msg)
 
 
 async def _get_active_page(playwright_instance, *, url: str | None = None):
@@ -159,7 +178,7 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
         url: 指定されたら遷移する
 
     Returns:
-        tuple: (page, browser) または (None, None) とエラーメッセージ
+        tuple: (page, browser) または (None, None)
     """
     if url and url.lower() in {'null', 'none', 'undefined', ''}:
         url = None
@@ -178,7 +197,7 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
             )
             logger.error(error_msg)
             await browser.close()
-            return None, None, error_msg
+            raise BrowserRuntimeError(error_msg)
 
         # 全コンテキストからページを収集
         all_pages = []
@@ -192,7 +211,7 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
             error_msg = "❌ エラー: Chrome にアクティブなページがありません"
             logger.error(error_msg)
             await browser.close()
-            return None, None, error_msg
+            raise BrowserRuntimeError(error_msg)
 
         # 最も最近アクティブになったページを特定
         active_page = await _find_most_recent_active_page(all_pages)
@@ -212,13 +231,13 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
             await active_page.goto(url)
             await active_page.wait_for_load_state('networkidle')
 
-        return active_page, browser, None
+        return active_page, browser
 
     except Exception as e:
         await browser.close()
         error_msg = f"❌ エラー: アクティブページの取得中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
-        return None, None, error_msg
+        raise BrowserRuntimeError(error_msg)
 
 
 async def _find_most_recent_active_page(pages):
@@ -372,9 +391,7 @@ async def get_page_source(*, url: str | None = None):
     logger.info("ソースコード取得開始")
 
     async with async_playwright() as p:
-        page, browser, error = await _get_active_page(p, url=url)
-        if error:
-            return {'error': error}
+        page, browser = await _get_active_page(p, url=url)
 
         try:
             # 現在の状態を取得
@@ -416,9 +433,7 @@ async def get_visible_screenshot(*, url: str | None = None):
     logger.info("表示箇所のスクリーンショット取得開始")
 
     async with async_playwright() as p:
-        page, browser, error = await _get_active_page(p, url=url)
-        if error:
-            return {'error': error}
+        page, browser = await _get_active_page(p, url=url)
 
         try:
             # 現在の状態を取得
@@ -468,9 +483,7 @@ async def get_full_screenshot(*, url: str | None = None):
     logger.info("全領域のスクリーンショット取得開始")
 
     async with async_playwright() as p:
-        page, browser, error = await _get_active_page(p, url=url)
-        if error:
-            return {'error': error}
+        page, browser = await _get_active_page(p, url=url)
 
         try:
             # 現在の状態を取得
@@ -538,7 +551,7 @@ async def get_current_url():
     except Exception as e:
         error_msg = f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
-        return {'error': error_msg}
+        raise BrowserBotTaskFailedError(error_msg)
 
 
 async def super_reload(*, url: str | None = None):
@@ -564,14 +577,12 @@ async def super_reload(*, url: str | None = None):
             tabs = tabs_response.json()
 
             if not tabs:
-                return {'error': 'アクティブなタブが見つかりません'}
+                raise BrowserBotTaskAbortedError(
+                    'アクティブなタブが見つかりません'
+                )
 
             # 最初のタブを取得
             active_tab = tabs[0]
-            tab_id = active_tab['id']
-
-            # WebSocketエンドポイントURLを構築
-            ws_url = f"http://localhost:9222/json/runtime/evaluate"
 
             # URL指定がある場合は先に移動
             if url:
@@ -617,7 +628,7 @@ async def super_reload(*, url: str | None = None):
     except Exception as e:
         error_msg = f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
-        return {'error': error_msg}
+        raise BrowserBotTaskFailedError(error_msg)
 
 
 async def run_script(*, script: str, url: str | None = None):
@@ -631,6 +642,14 @@ async def run_script(*, script: str, url: str | None = None):
     Returns:
         JavaScript の実行結果
     """
+    if not script:
+        logger.error(
+            "❌ run_script: エラー: 実行する JavaScript (script) が指定されていません。"
+        )
+        raise BrowserBotTaskAbortedError(
+            "実行する JavaScript が指定されていません。"
+        )
+
     logger.info("JavaScript スクリプト実行開始")
     logger.debug(f"スクリプト内容: {script}...")
 
@@ -643,46 +662,97 @@ async def run_script(*, script: str, url: str | None = None):
         return None
 
     async with async_playwright() as p:
-        page, browser, error = await _get_active_page(p, url=url)
-        if error:
-            logger.error(f"ページ取得エラー: {error}")
-            return None
+        page, browser = await _get_active_page(p, url=url)
 
         try:
             # ページが完全に読み込まれるまで待機
             await page.wait_for_load_state('networkidle')
 
             # JavaScript を実行
-            try:
-                # スクリプトを async function で囲って実行
-                wrapped_script = f"(async () => {{\n{script}\n}})();"
-                result = await page.evaluate(wrapped_script)
-                logger.info(
-                    f"✅ JavaScript スクリプト実行完了: result={result}"
-                )
+            # スクリプトを async function で囲って実行
+            wrapped_script = f"(async () => {{\n{script}\n}})();"
+            result = await page.evaluate(wrapped_script)
+            logger.info(f"✅ JavaScript スクリプト実行完了: result={result}")
 
-                # 実行結果をログに記録（結果が大きい場合は切り詰める）
-                if result is not None:
-                    result_str = str(result)
-                    if len(result_str) > 500:
-                        logger.debug(f"実行結果: {result_str[:500]}...")
-                    else:
-                        logger.debug(f"実行結果: {result_str}")
+            # 実行結果をログに記録（結果が大きい場合は切り詰める）
+            if result is not None:
+                result_str = str(result)
+                if len(result_str) > 500:
+                    logger.debug(f"実行結果: {result_str[:500]}...")
+                else:
+                    logger.debug(f"実行結果: {result_str}")
 
-                return result
-
-            except Exception as e:
-                error_msg = (
-                    f"❌ JavaScript 実行中にエラーが発生しました: "
-                    f"{e.__class__.__name__}: {e}"
-                )
-                logger.error(error_msg, exc_info=True)
-                return None
+            return result
 
         except Exception as e:
             error_msg = f"❌ スクリプト実行中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
             logger.error(error_msg, exc_info=True)
-            return None
+            raise BrowserBotTaskFailedError(error_msg)
+
+        finally:
+            await browser.close()
+            logger.info("ブラウザ接続を閉じました")
+
+
+async def run_python_script(
+    *, python_script_text: str = None, url: str | None = None
+):
+    """
+    Playwright 用の Python スクリプトを実行する。
+    eval 的なコード実行をしているのでリスクがある。信頼できるコードのみ実行すること。
+
+    Args:
+        python_script_text: 実行する Python コード
+            page オブジェクトを 'page' という変数名で使用可能。
+            return を書くとその値が実行結果として返される。
+        url: 指定されたらその URL に移動してから実行
+
+    Returns:
+        return の実行結果
+    """
+    if not python_script_text:
+        logger.error(
+            "❌ run_python_script: エラー: 実行する Python スクリプト "
+            "(python_script_text) が指定されていません。"
+        )
+        raise BrowserBotTaskAbortedError(
+            "実行する Python スクリプトが指定されていません。"
+        )
+
+    logger.info("Python スクリプト実行開始")
+
+    await _check_chrome_running()
+
+    async with async_playwright() as p:
+        page, browser = await _get_active_page(p, url=url)
+
+        # ページが完全に読み込まれるまで待機
+        await page.wait_for_load_state('networkidle')
+
+        # page オブジェクトを利用可能にして Python スクリプトを実行
+        local_vars = {'page': page, 'asyncio': asyncio}
+        global_vars = {'page': page, 'asyncio': asyncio}
+        try:
+            # async 関数として実行するためにラップ
+            wrapped_script = f"""
+async def user_script():
+{chr(10).join('    ' + line for line in python_script_text.strip().split(chr(10)))}
+"""
+            logger.debug('wrapped_script: %s', wrapped_script)
+            # 関数を定義
+            compiled_code = compile(wrapped_script, '<string>', 'exec')
+            exec(compiled_code, global_vars, local_vars)
+            # 定義した関数を実行
+            result = await local_vars['user_script']()
+            logger.info(
+                f"カスタム Python スクリプトの実行が完了しました: {result=}"
+            )
+            return result
+
+        except Exception as e:
+            error_msg = f"❌ スクリプト実行中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
+            logger.error(error_msg, exc_info=True)
+            raise BrowserBotTaskFailedError(error_msg)
 
         finally:
             await browser.close()
@@ -703,7 +773,12 @@ if __name__ == '__main__':
     parser.add_argument(
         '--script',
         action='store_true',
-        help='Execute input as JavaScript instead of browser_use task.',
+        help='Execute input as JavaScript instead of Playwright task.',
+    )
+    parser.add_argument(
+        '--python-script',
+        action='store_true',
+        help='Execute input as Python script instead of Playwright task.',
     )
     parser.add_argument(
         '--url',
@@ -729,12 +804,23 @@ if __name__ == '__main__':
 
     # --script フラグがある場合は JavaScript として実行
     # JavaScript コードは自動的に async 即時関数でラップされて実行される
-    if args.script:
-        result = asyncio.run(run_script(script=task, url=args.url))
-        if result is not None:
-            print(result)
-    else:
-        # 通常のタスクとして実行
-        asyncio.run(
-            run_task(task=task, max_steps=args.max_steps, url=args.url)
-        )
+    try:
+        if args.python_script:
+            # Playwright 用の Python スクリプトを実行
+            result = asyncio.run(run_python_script(script=task, url=args.url))
+            if result is not None:
+                print(result)
+
+        elif args.script:
+            # Playwright 内で JavaScript を実行
+            result = asyncio.run(run_script(script=task, url=args.url))
+            if result is not None:
+                print(result)
+        else:
+            # browser_use のタスク
+            asyncio.run(
+                run_task(task=task, max_steps=args.max_steps, url=args.url)
+            )
+    except BrowserBotError as e:
+        logger.error(f"❌ エラー: {e}")
+        sys.exit(1)

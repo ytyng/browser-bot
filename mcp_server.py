@@ -477,7 +477,7 @@ async def run_javascript_in_browser(
         return {"message": success_msg, "result": result}
 
     except Exception as e:
-        error_msg = f"❌ エラー: JavaScript 実行中に予期しないエラーが発生しました: {str(e)}"
+        error_msg = f"❌ エラー: JavaScript 実行中にエラーが発生しました: {e.__class__} {e}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 
@@ -524,9 +524,7 @@ async def get_current_url_tool() -> str:
         return response
 
     except Exception as e:
-        error_msg = (
-            f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {str(e)}"
-        )
+        error_msg = f"❌ エラー: URL 取得中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 
@@ -587,7 +585,7 @@ async def super_reload_tool(
         return response
 
     except Exception as e:
-        error_msg = f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: {str(e)}"
+        error_msg = f"❌ エラー: スーパーリロード中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 
