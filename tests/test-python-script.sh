@@ -3,12 +3,12 @@
 cd $(dirname $0)/../
 
 echo "
-await asyncio.sleep(3)
+await asyncio.sleep(1)
 
-await page.click('.header .search-form input.header-search-input')
+await page.click('.header .search-form span.header-search-input')
 await page.fill(
     '#search-modal-input',
-    "ハイキュー",
+    'ハイキュー',
 )
 
 await asyncio.sleep(1)
