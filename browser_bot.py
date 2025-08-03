@@ -680,28 +680,30 @@ async def get_current_url():
     """
     logger.info("現在の URL 取得開始")
 
-    try:
-        # Chrome の DevTools Protocol を使って直接取得
-        async with httpx.AsyncClient() as client:
-            # タブ一覧を取得
-            tabs_response = await client.get('http://localhost:9222/json')
-            tabs = tabs_response.json()
+    async with async_playwright() as p:
+        page, browser = await _get_active_page(p, url=None)
 
-            if not tabs:
-                return {'error': 'アクティブなタブが見つかりません'}
+        try:
+            # 現在の状態を取得
+            current_url = page.url
 
-            # 最初のタブの情報を取得
-            active_tab = tabs[0]
-            url = active_tab.get('url', 'Unknown')
-            title = active_tab.get('title', 'Unknown')
+            # タイトルを取得
+            try:
+                title = await page.title()
+            except Exception:
+                title = "Unknown"
+                logger.warning("タイトル取得に失敗しました")
 
-            logger.info(f"現在の URL 取得完了: {url}")
-            return {'url': url, 'title': title}
+            logger.info(f"現在の URL 取得完了: {current_url}")
 
-    except Exception as e:
-        error_msg = f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
-        logger.error(error_msg, exc_info=True)
-        raise BrowserBotTaskFailedError(error_msg)
+            return {'url': current_url, 'title': title}
+
+        except Exception as e:
+            error_msg = f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
+            logger.error(error_msg, exc_info=True)
+            raise BrowserBotTaskFailedError(error_msg)
+        finally:
+            await browser.close()
 
 
 async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
