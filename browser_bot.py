@@ -232,7 +232,12 @@ async def run_task(
         raise BrowserBotTaskFailedError(error_msg)
 
 
-async def _get_active_page(playwright_instance, *, url: str | None = None):
+async def _get_active_page(
+    playwright_instance,
+    *,
+    url: str | None = None,
+    create_new_page: bool = True,
+):
     """
     Chrome のアクティブなページを取得する共通処理
 
@@ -284,21 +289,31 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
                         continue
                     all_pages.append(page)
 
-        if not all_pages:
-            error_msg = "❌ エラー: Chrome にアクティブなページがありません"
-            logger.error(error_msg)
-            await browser.close()
-            raise BrowserRuntimeError(error_msg)
+        if all_pages:
+            # 最も最近アクティブになったページを特定
+            active_page = await _find_most_recent_active_page(all_pages)
 
-        # 最も最近アクティブになったページを特定
-        active_page = await _find_most_recent_active_page(all_pages)
+            if not active_page:
+                # フォールバック: 最初の有効なページを使用
+                active_page = all_pages[0]
+                logger.info(
+                    "最新のアクティブページが特定できないため、最初のページを使用します"
+                )
 
-        if not active_page:
-            # フォールバック: 最初の有効なページを使用
-            active_page = all_pages[0]
-            logger.info(
-                "最新のアクティブページが特定できないため、最初のページを使用します"
-            )
+        else:
+            # ページが取得できなかった
+            if create_new_page:
+                # 無かった場合に作る設定になっている
+                # 新しいページを作成
+                active_page = await browser.new_page()
+                all_pages = [active_page]
+            else:
+                error_msg = (
+                    "❌ エラー: Chrome にアクティブなページがありません"
+                )
+                logger.error(error_msg)
+                await browser.close()
+                raise BrowserRuntimeError(error_msg)
 
         logger.info(f"アクティブページを特定: {active_page.url}")
 
@@ -681,7 +696,9 @@ async def get_current_url():
     logger.info("現在の URL 取得開始")
 
     async with async_playwright() as p:
-        page, browser = await _get_active_page(p, url=None)
+        page, browser = await _get_active_page(
+            p, url=None, create_new_page=False
+        )
 
         try:
             # 現在の状態を取得
