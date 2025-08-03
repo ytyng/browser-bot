@@ -70,6 +70,13 @@ Chrome に対しての操作指示をする場合、このツールを使って�
 
 補足:
 ログは {log_file} に保存されます。必要に応じて確認してください。
+
+ログを、 [browser-console] で grep すると、ブラウザのコンソールログに限定して取得できます。
+
+例:
+```
+tail -f {log_file} | grep '\[browser-console\]'
+```
 """,
 )
 

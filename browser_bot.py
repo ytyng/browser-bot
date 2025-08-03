@@ -178,18 +178,8 @@ async def run_task(
     # 現在のページを取得してコンソールイベントをリスン
     try:
         page = await browser_session.get_current_page()
-
-        # コンソールメッセージのリスナーを設定
-        page.on(
-            'console',
-            lambda msg: broser_console_logger.info(f"[{msg.type}] {msg.text}"),
-        )
-
-        # エラーイベントもキャプチャ
-        page.on(
-            'pageerror',
-            lambda error: broser_console_logger.error(f"[PAGE ERROR] {error}"),
-        )
+        _setup_page_logging(page)
+        await page.wait_for_load_state('networkidle')
     except Exception as e:
         error_msg = f"❌ エラー: エージェント実行中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
@@ -278,6 +268,20 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
             for page in context.pages:
                 # ページが閉じられていないかチェック
                 if not page.is_closed():
+                    # DevTools や特殊なプロトコルのページをスキップ
+                    page_url = page.url
+                    if page_url.startswith(
+                        (
+                            'devtools://',
+                            'chrome://',
+                            'chrome-extension://',
+                            'moz-extension://',
+                        )
+                    ):
+                        logger.debug(
+                            f"特殊プロトコルページをスキップ: {page_url}"
+                        )
+                        continue
                     all_pages.append(page)
 
         if not all_pages:
@@ -304,6 +308,9 @@ async def _get_active_page(playwright_instance, *, url: str | None = None):
             await active_page.goto(url)
             # ページのロード状態を待機
             await _page_wait_for_load_state(active_page)
+
+        # ページログ転送を設定
+        _setup_page_logging(active_page)
 
         return active_page, browser
 
@@ -334,6 +341,19 @@ async def _find_most_recent_active_page(pages):
 
                 # ページの基本情報を取得
                 url = page.url
+
+                # DevTools や特殊なプロトコルのページをスキップ
+                if url.startswith(
+                    (
+                        'devtools://',
+                        'chrome://',
+                        'chrome-extension://',
+                        'moz-extension://',
+                    )
+                ):
+                    logger.debug(f"特殊プロトコルページをスキップ: {url}")
+                    continue
+
                 title = (
                     await page.title() if not page.is_closed() else "Unknown"
                 )
@@ -405,6 +425,35 @@ async def _find_most_recent_active_page(pages):
             exc_info=True,
         )
         return None
+
+
+def _setup_page_logging(page):
+    """
+    ページにコンソールログとエラーログの転送を設定する
+
+    Args:
+        page: Playwright page オブジェクト
+    """
+    try:
+        # コンソールメッセージのリスナーを設定
+        page.on(
+            'console',
+            lambda msg: broser_console_logger.info(
+                f"console.{msg.type}: {msg.text}"
+            ),
+        )
+
+        # エラーイベントもキャプチャ
+        page.on(
+            'pageerror',
+            lambda error: broser_console_logger.error(f"[PAGE ERROR] {error}"),
+        )
+
+        logger.debug(f"ページログ転送を設定: {page.url}")
+    except Exception as e:
+        logger.warning(
+            f"ページログ転送設定に失敗: {e.__class__.__name__}: {e}"
+        )
 
 
 def _resize_image_if_needed(
