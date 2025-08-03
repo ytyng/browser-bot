@@ -20,7 +20,7 @@ from typing import Annotated
 
 import httpx
 
-from logging_config import logger
+from logging_config import log_file, logger
 
 # テレメトリを無効化
 os.environ['ANONYMIZED_TELEMETRY'] = 'false'
@@ -66,7 +66,11 @@ Chrome に対しての操作指示をする場合、このツールを使って�
 
 注意事項:
 - Chrome が --remote-debugging-port=9222 で起動している必要があります
-- launch-chrome.sh スクリプトを使用して Chrome を起動してください""",
+- launch-chrome.sh スクリプトを使用して Chrome を起動してください
+
+補足:
+ログは {log_file} に保存されます。必要に応じて確認してください。
+""",
 )
 
 

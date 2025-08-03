@@ -5,9 +5,10 @@ import os
 
 # ファイルハンドラーの設定
 log_file = '/tmp/browser-bot.log'
+
 file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
 file_handler.setFormatter(
-    logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.Formatter('%(asctime)s [%(name)s] [%(levelname)s] %(message)s')
 )
 
 # ルートロガーの設定
@@ -44,6 +45,7 @@ def setup_logger_for_mcp_server():
         ('fastmcp', logging.INFO),
         ('FastMCP.fastmcp.server.server', logging.INFO),
         ('browser_use', logging.DEBUG),
+        ('browser-console', logging.DEBUG),
     ]:
         _logger = logging.getLogger(logger_name)
         _logger.handlers = []
@@ -53,3 +55,5 @@ def setup_logger_for_mcp_server():
 
 
 setup_logger_for_mcp_server()
+
+broser_console_logger = logging.getLogger('browser-console')

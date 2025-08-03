@@ -5,7 +5,7 @@ import asyncio
 import os
 import sys
 
-from logging_config import logger
+from logging_config import broser_console_logger, logger
 
 # テレメトリを無効化
 os.environ['ANONYMIZED_TELEMETRY'] = 'false'
@@ -172,13 +172,34 @@ async def run_task(
     # 既存の Chrome に接続
     browser_session = BrowserSession(cdp_url='http://localhost:9222')
 
+    # browser_session を開始してコンソールメッセージのリスナーを設定
+    await browser_session.start()
+
+    # 現在のページを取得してコンソールイベントをリスン
+    try:
+        page = await browser_session.get_current_page()
+
+        # コンソールメッセージのリスナーを設定
+        page.on(
+            'console',
+            lambda msg: broser_console_logger.info(f"[{msg.type}] {msg.text}"),
+        )
+
+        # エラーイベントもキャプチャ
+        page.on(
+            'pageerror',
+            lambda error: broser_console_logger.error(f"[PAGE ERROR] {error}"),
+        )
+    except Exception as e:
+        error_msg = f"❌ エラー: エージェント実行中にエラーが発生しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        raise BrowserBotTaskFailedError(error_msg)
+
     # URL が指定されている場合、ブラウザを直接操作して遷移
     if url:
         logger.info(f"指定された URL に遷移: {url}")
         try:
-            # browser_session を開始
-            await browser_session.start()
-            # 現在のページを取得
+            # 現在のページを取得（すでに browser_session.start() 済み）
             page = await browser_session.get_current_page()
             # URL に遷移
             await page.goto(url)
@@ -200,12 +221,21 @@ async def run_task(
         browser_session=browser_session,
     )
 
+    timeout_seconds = max_steps * 6
+
     try:
-        result = await agent.run(max_steps=max_steps)
+        # 1分（60秒）のタイムアウトを設定
+        result = await asyncio.wait_for(
+            agent.run(max_steps=max_steps), timeout=timeout_seconds
+        )
         logger.info(
             f"タスク完了 (max_steps={max_steps}): {str(result)[:200]}..."
         )  # 最初の200文字のみログに記録
         return result
+    except asyncio.TimeoutError:
+        error_msg = f"❌ エラー: エージェント実行が{timeout_seconds}秒でタイムアウトしました"
+        logger.error(error_msg)
+        raise BrowserBotTaskFailedError(error_msg)
     except Exception as e:
         error_msg = f"❌ エラー: エージェント実行中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
