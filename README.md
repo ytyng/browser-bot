@@ -32,7 +32,7 @@ uv sync
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
-# デフォルトは gpt-4.1-mini
+# デフォルトは gpt-5-mini
 # 他のモデルを使う場合は BROWSER_USE_LLM_MODEL を設定
 # BROWSER_USE_LLM_MODEL=gpt-4o
 ```
