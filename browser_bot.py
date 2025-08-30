@@ -158,16 +158,14 @@ async def _get_browser_connection(playwright_instance):
         Browser: 接続されたブラウザインスタンス
     """
     if BROWSER_BOT_USE_REMOTE:
-        logger.info(f"リモートブラウザに接続: {SELENIUM_REMOTE_URL}")
-        # リモートブラウザの場合は WebDriver エンドポイントに接続
-        # Selenium Grid の場合、通常は /wd/hub エンドポイントを使用
-        selenium_endpoint = f"{SELENIUM_REMOTE_URL.rstrip('/')}/wd/hub"
-        logger.info(f"Selenium Grid エンドポイント: {selenium_endpoint}")
+        from selenium_remote import get_cdp_url_from_selenium_grid
 
-        # リモート Chromium に接続
-        browser = await playwright_instance.chromium.connect(
-            ws_endpoint=selenium_endpoint
-        )
+        logger.info(f"リモートブラウザに接続: {SELENIUM_REMOTE_URL}")
+
+        # Selenium Grid から CDP URL を取得
+        cdp_url = await get_cdp_url_from_selenium_grid(SELENIUM_REMOTE_URL)
+        # リモートブラウザに接続（CDP URL 使用）
+        browser = await playwright_instance.chromium.connect_over_cdp(cdp_url)
         return browser
     else:
         # Chrome が起動しているか確認
@@ -227,11 +225,13 @@ async def run_task(
     logger.debug(f"{BROWSER_BOT_USE_REMOTE=}")
     # リモートブラウザかローカルブラウザかによって処理を分岐
     if BROWSER_BOT_USE_REMOTE:
+        from selenium_remote import get_cdp_url_from_selenium_grid
+
         logger.info(f"リモートブラウザを使用: {SELENIUM_REMOTE_URL}")
-        # リモートブラウザに接続（Selenium Grid）
-        browser_session = BrowserSession(
-            is_local=False, cdp_url=SELENIUM_REMOTE_URL
-        )
+        # Selenium Grid から CDP URL を取得
+        cdp_url = await get_cdp_url_from_selenium_grid(SELENIUM_REMOTE_URL)
+        # リモートブラウザに接続（CDP URL 使用）
+        browser_session = BrowserSession(cdp_url=cdp_url)
     else:
         # Chrome が起動しているか確認
         await _check_chrome_running()
