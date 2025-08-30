@@ -11,6 +11,12 @@ dependencies = [
     "pillow>=11.2.1",
     "python-dotenv>=1.1.0",
 ]
+
 [project.optional-dependencies]
 # uv sync --extra test
 test = []
+
+# uv sync --extra selenium-remote
+selenium-remote = [
+    "selenium>=4.27.1",
+]

@@ -43,6 +43,28 @@ from browser_bot import (
 # .envファイルから環境変数を読み込む
 load_dotenv()
 
+# Chrome 接続先の設定 (デフォルト: http://localhost:9222)
+CHROME_DEBUG_URL = os.getenv("CHROME_DEBUG_URL", "http://localhost:9222")
+CHROME_DEBUG_HOST = (
+    CHROME_DEBUG_URL.replace("http://", "")
+    .replace("https://", "")
+    .split(":")[0]
+)
+CHROME_DEBUG_PORT = int(
+    CHROME_DEBUG_URL.replace("http://", "")
+    .replace("https://", "")
+    .split(":")[1]
+    if ":" in CHROME_DEBUG_URL
+    else "9222"
+)
+
+# リモートブラウザ使用フラグ
+USE_REMOTE_BROWSER = os.getenv("USE_REMOTE_BROWSER", "false").lower() == "true"
+
+# Selenium Grid URL (リモートブラウザ使用時)
+SELENIUM_REMOTE_URL = os.getenv(
+    "SELENIUM_REMOTE_URL", "http://selenium-grid.cyberneura.com:31444"
+)
 
 # MCPサーバーの設定
 server = fastmcp.FastMCP(
@@ -84,8 +106,8 @@ tail -f {log_file} | grep '\[browser-console\]'
 # ツールを登録
 @server.tool(
     name="browser_use_local_chrome",
-    description="""ローカルで起動している Chrome (:9222) に接続して、
-browser_use ライブラリを用いてブラウザ操作を行うツールです。
+    description="""Chrome に接続してブラウザ操作を行うツールです。
+ローカル Chrome または リモート Selenium Grid に対応しています。
 
 このツールは、基本的には操作をするだけです。
 結果の確認や、ページの状態を取得することには適していません。
@@ -637,7 +659,7 @@ async def super_reload_tool(
 # Chrome 起動ツール
 @server.tool(
     name="launch_chrome_with_debug",
-    description="""Chrome をデバッグポート 9222 で起動します。
+    description="""Chrome をデバッグポート 9222 で起動します（ゲストモード/通常モード選択可能）。
 
 このツールは、browser_bot が接続するための Chrome ブラウザを起動します。
 既に起動している場合は、その旨を通知します。
@@ -645,19 +667,49 @@ async def super_reload_tool(
 機能:
 - ポート 9222 の使用状況をチェック
 - 既存の Chrome プロセスを検知
-- 新規 Chrome の起動
+- 新規 Chrome をゲストモードまたは通常モードで起動
 - プラットフォーム対応 (macOS, Linux, Windows)
+
+モード選択:
+- ゲストモード (as_guest=True): プライバシー保護、クリーンな環境でのテスト
+- 通常モード (as_guest=False): 既存のプロファイルやデータを使用
 
 使用用途:
 - browser_bot を使用する前の Chrome 起動
 - 開発・テスト環境の準備
 """,
 )
-async def launch_chrome_with_debug() -> str:
-    """Chrome をデバッグポート 9222 で起動する"""
-    logger.info("Chrome 起動ツール実行開始")
+async def launch_chrome_with_debug(
+    as_guest: Annotated[
+        bool,
+        Field(
+            description=(
+                "Chrome をゲストモードで起動するかどうか。\n"
+                "True: ゲストモードで起動（プライバシー保護、クリーンな環境）\n"
+                "False: 通常モードで起動（既存のプロファイルやデータを使用）"
+            ),
+            examples=[True, False],
+        ),
+    ] = True,
+) -> str:
+    """Chrome をデバッグポートで起動する（リモートブラウザ使用時はスキップ）"""
+    mode_text = "ゲストモード" if as_guest else "通常モード"
 
-    # ポート 9222 が使用中かチェック
+    if USE_REMOTE_BROWSER:
+        logger.info(
+            f"リモートブラウザ使用中 ({SELENIUM_REMOTE_URL}) - Chrome 起動をスキップ"
+        )
+        return (
+            f"✅ リモートブラウザを使用中です ({SELENIUM_REMOTE_URL})\n\n"
+            "browser_bot ツールを使用できます。"
+        )
+
+    logger.info(
+        f"Chrome {mode_text}起動ツール実行開始 (URL: {CHROME_DEBUG_URL})"
+    )
+
+    # ローカルブラウザの場合のみポート確認
+    # ポートが使用中かチェック
     def is_port_in_use(port: int) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
@@ -666,30 +718,34 @@ async def launch_chrome_with_debug() -> str:
             except socket.error:
                 return True
 
-    if is_port_in_use(9222):
+    if is_port_in_use(CHROME_DEBUG_PORT):
         # ポートが使用中の場合、Chrome が起動しているか確認
+        message_to_append = ""
         try:
 
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    "http://localhost:9222/json/version", timeout=2
+                    f"{CHROME_DEBUG_URL}/json/version", timeout=2
                 )
                 if response.status_code == 200:
                     version_info = response.json()
                     browser_info = version_info.get('Browser', 'Unknown')
                     logger.info(f"Chrome は既に起動しています: {browser_info}")
                     return (
-                        f"✅ Chrome は既に起動しています (ポート 9222)\n\n"
+                        f"✅ Chrome は既に起動しています ({CHROME_DEBUG_URL})\n\n"
                         f"ブラウザ情報: {browser_info}\n\n"
                         "browser_bot ツールを使用できます。"
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            message_to_append = f" (エラー: {e.__class__.__name__}: {e})"
 
         logger.warning(
-            "ポート 9222 は使用中ですが、Chrome ではない可能性があります"
+            f"ポート {CHROME_DEBUG_PORT} は使用中ですが、Chrome ではない可能性があります{message_to_append}"
         )
-        return "⚠️ ポート 9222 は既に使用されていますが、Chrome ではない可能性があります。\n\n既存のプロセスを確認してください。"
+        return (
+            f"⚠️ ポート {CHROME_DEBUG_PORT} は既に使用されていますが、Chrome ではない可能性があります。"
+            f"\n\n既存のプロセスを確認してください。{message_to_append}"
+        )
 
     # Chrome の実行パスを取得
     system = platform.system()
@@ -736,18 +792,26 @@ async def launch_chrome_with_debug() -> str:
         return error_msg
 
     # Chrome 起動オプション
-    user_data_dir = os.path.expanduser("~/.google-chrome-debug")
     chrome_args = [
         chrome_executable,
-        "--remote-debugging-port=9222",
-        f"--user-data-dir={user_data_dir}",
+        f"--remote-debugging-port={CHROME_DEBUG_PORT}",
         "--no-first-run",
         "--disable-default-apps",
     ]
 
+    if as_guest:
+        # ゲストモードの場合
+        chrome_args.append("--guest")
+    else:
+        # 通常モードの場合
+        user_data_dir = os.path.expanduser("~/.google-chrome-debug")
+        chrome_args.append(f"--user-data-dir={user_data_dir}")
+
     try:
         # Chrome を起動
-        logger.info(f"Chrome を起動しています: {chrome_executable}")
+        logger.info(
+            f"Chrome を{mode_text}で起動しています: {chrome_executable}"
+        )
         subprocess.Popen(
             chrome_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
@@ -763,7 +827,7 @@ async def launch_chrome_with_debug() -> str:
                     version_info = response.json()
                     browser_info = version_info.get('Browser', 'Unknown')
                     success_msg = (
-                        f"✅ Chrome を正常に起動しました (ポート 9222)\n\n"
+                        f"✅ Chrome を{mode_text}で正常に起動しました (ポート 9222)\n\n"
                         f"ブラウザ情報: {browser_info}\n\n"
                         "browser_bot ツールを使用できます。"
                     )
@@ -776,7 +840,7 @@ async def launch_chrome_with_debug() -> str:
 
         # 起動したけど確認できない場合
         return (
-            "✅ Chrome を起動しました (ポート 9222)\n\n"
+            f"✅ Chrome を{mode_text}で起動しました (ポート 9222)\n\n"
             "起動確認はできませんでしたが、少し待ってから browser_bot ツールを試してください。"
         )
 

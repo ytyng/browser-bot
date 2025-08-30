@@ -19,6 +19,22 @@ from PIL import Image
 from playwright._impl._errors import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
+# 環境変数を読み込む
+dotenv.load_dotenv()
+
+# Chrome 接続先の設定 (デフォルト: http://localhost:9222)
+CHROME_DEBUG_URL = os.getenv("CHROME_DEBUG_URL", "http://localhost:9222")
+
+# リモートブラウザ使用フラグ
+BROWSER_BOT_USE_REMOTE = os.getenv(
+    "BROWSER_BOT_USE_REMOTE", "false"
+).lower() in {"true", "1", "yes"}
+
+# Selenium Grid URL (リモートブラウザ使用時)
+SELENIUM_REMOTE_URL = os.getenv(
+    "SELENIUM_REMOTE_URL", "http://selenium-grid.cyberneura.com:31444"
+)
+
 
 class BrowserBotError(Exception):
     pass
@@ -83,27 +99,34 @@ async def _page_wait_for_load_state(
 
 async def _check_chrome_running():
     """
-    Chrome が :9222 で起動しているかを確認する共通処理
+    Chrome が起動しているかを確認する共通処理
 
     Returns:
         str | None: エラーメッセージ、または None（正常時）
     """
+    if BROWSER_BOT_USE_REMOTE:
+        # リモートブラウザ使用時はチェックしない
+        logger.debug(
+            f'Using remote browser. SELENIUM_REMOTE_URL={SELENIUM_REMOTE_URL}'
+        )
+        return
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                'http://localhost:9222/json/version', timeout=5.0
+                f'{CHROME_DEBUG_URL}/json/version', timeout=5.0
             )
             if response.status_code != 200:
                 error_msg = (
-                    "❌ エラー: Chrome が :9222 で起動していません。"
-                    "launch-chrome.sh を実行してから再度お試しください。"
+                    f"❌ エラー: Chrome が {CHROME_DEBUG_URL} で起動していません。"
+                    "Chrome をデバッグポートで起動してから再度お試しください。"
                 )
                 logger.error(error_msg)
                 raise BrowserRuntimeError(error_msg)
     except httpx.ConnectError:
         error_msg = (
-            "❌ エラー: Chrome が :9222 で起動していません。"
-            "launch-chrome.sh を実行してから再度お試しください。"
+            f"❌ エラー: Chrome が {CHROME_DEBUG_URL} で起動していません。"
+            "Chrome をデバッグポートで起動してから再度お試しください。"
         )
         logger.error(error_msg)
         raise BrowserRuntimeError(error_msg)
@@ -119,7 +142,40 @@ async def _check_chrome_running():
         logger.error(error_msg)
         raise BrowserRuntimeError(error_msg)
 
-    logger.info("✅ Chrome が :9222 で起動していることを確認しました。")
+    logger.info(
+        f"✅ Chrome が {CHROME_DEBUG_URL} で起動していることを確認しました。"
+    )
+
+
+async def _get_browser_connection(playwright_instance):
+    """
+    リモートブラウザかローカルブラウザかに応じてブラウザ接続を取得する
+
+    Args:
+        playwright_instance: Playwright インスタンス
+
+    Returns:
+        Browser: 接続されたブラウザインスタンス
+    """
+    if BROWSER_BOT_USE_REMOTE:
+        from selenium_remote import get_cdp_url_from_selenium_grid
+
+        logger.info(f"リモートブラウザに接続: {SELENIUM_REMOTE_URL}")
+
+        # Selenium Grid から CDP URL を取得
+        cdp_url = await get_cdp_url_from_selenium_grid(SELENIUM_REMOTE_URL)
+        # リモートブラウザに接続（CDP URL 使用）
+        browser = await playwright_instance.chromium.connect_over_cdp(cdp_url)
+        return browser
+    else:
+        # Chrome が起動しているか確認
+        await _check_chrome_running()
+
+        # ローカル Chrome の CDP エンドポイントに接続
+        browser = await playwright_instance.chromium.connect_over_cdp(
+            CHROME_DEBUG_URL
+        )
+        return browser
 
 
 # LLM モデルを取得する関数
@@ -148,7 +204,7 @@ async def run_task(
     *, task: str, max_steps: int | None = None, url: str | None = None
 ):
     """
-    :9222 の Chrome でログインする。
+    設定した Chrome デバッグポートでログインする。
 
     Args:
         task: 実行するタスクの説明
@@ -164,13 +220,24 @@ async def run_task(
         # 環境変数から max_steps を取得
         max_steps = int(os.getenv('BROWSER_USE_MAX_STEPS', 7))
 
-    logger.debug(f"max_steps: {max_steps}")
+    logger.debug(f"{max_steps=}")
 
-    # Chrome が :9222 で起動しているか確認
-    await _check_chrome_running()
+    logger.debug(f"{BROWSER_BOT_USE_REMOTE=}")
+    # リモートブラウザかローカルブラウザかによって処理を分岐
+    if BROWSER_BOT_USE_REMOTE:
+        from selenium_remote import get_cdp_url_from_selenium_grid
 
-    # 既存の Chrome に接続
-    browser_session = BrowserSession(cdp_url='http://localhost:9222')
+        logger.info(f"リモートブラウザを使用: {SELENIUM_REMOTE_URL}")
+        # Selenium Grid から CDP URL を取得
+        cdp_url = await get_cdp_url_from_selenium_grid(SELENIUM_REMOTE_URL)
+        # リモートブラウザに接続（CDP URL 使用）
+        browser_session = BrowserSession(cdp_url=cdp_url)
+    else:
+        # Chrome が起動しているか確認
+        await _check_chrome_running()
+
+        # 既存のローカル Chrome に接続
+        browser_session = BrowserSession(cdp_url=CHROME_DEBUG_URL)
 
     # browser_session を開始してコンソールメッセージのリスナーを設定
     await browser_session.start()
@@ -251,10 +318,8 @@ async def _get_active_page(
     if url and url.lower() in {'null', 'none', 'undefined', ''}:
         url = None
 
-    # Chrome の CDP エンドポイントに接続
-    browser = await playwright_instance.chromium.connect_over_cdp(
-        'http://localhost:9222'
-    )
+    # ブラウザに接続
+    browser = await _get_browser_connection(playwright_instance)
 
     try:
         # 既存のコンテキストを取得
@@ -740,7 +805,7 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
     """
     logger.info("スーパーリロード開始")
 
-    # Chrome が :9222 で起動しているか確認
+    # Chrome が起動しているか確認
     await _check_chrome_running()
 
     async with async_playwright() as p:
@@ -910,7 +975,7 @@ async def run_script(*, script: str, url: str | None = None):
     if url:
         logger.info(f"指定 URL: {url}")
 
-    # Chrome が :9222 で起動しているか確認
+    # Chrome が起動しているか確認
     chrome_check_error = await _check_chrome_running()
     if chrome_check_error:
         return None
