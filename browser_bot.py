@@ -1192,9 +1192,7 @@ async def request(
         raise BrowserBotTaskAbortedError(error_msg)
 
     async with async_playwright() as p:
-        page, _browser = await _get_active_page(
-            p, url=preload_url, create_new_page=False
-        )
+        page, _browser = await _get_active_page(p, url=preload_url)
 
         request_metod = getattr(page.request, method)
 

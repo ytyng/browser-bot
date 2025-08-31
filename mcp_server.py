@@ -507,7 +507,8 @@ async def run_javascript_in_browser(
                 "'password123'; document.querySelector('form').submit()",
                 "Array.from(document.querySelectorAll('.item')).forEach(el => "
                 "el.style.backgroundColor = 'yellow')",
-                "window.scrollTo(0, 0); setTimeout(() => window.print(), 1000)",
+                "window.scrollTo(0, 0); "
+                "setTimeout(() => window.print(), 1000)",
             ],
         ),
     ],
@@ -747,7 +748,8 @@ async def launch_chrome_with_debug(
             message_to_append = f" (エラー: {e.__class__.__name__}: {e})"
 
         logger.warning(
-            f"ポート {CHROME_DEBUG_PORT} は使用中ですが、Chrome ではない可能性があります{message_to_append}"
+            f"ポート {CHROME_DEBUG_PORT} は使用中ですが、Chrome ではない"
+            f"可能性があります{message_to_append}"
         )
         return (
             f"⚠️ ポート {CHROME_DEBUG_PORT} は既に使用されていますが、Chrome ではない可能性があります。"
@@ -859,7 +861,8 @@ async def launch_chrome_with_debug(
 
 @server.tool(
     name="http_request",
-    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL で HTTP リクエストを行い、結果をJSONで返します。
+    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL で
+    HTTP リクエストを行い、結果をJSONで返します。
 
 パラメーター:
     method: HTTP メソッド ('get', 'post', 'put', 'delete', 'patch', 'head', 'options')
@@ -892,7 +895,10 @@ async def http_request_tool(
     method: Annotated[
         str,
         Field(
-            description="HTTP メソッド ('get', 'post', 'put', 'delete', 'patch', 'head', 'options')",
+            description=(
+                "HTTP メソッド ('get', 'post', 'put', 'delete', "
+                "'patch', 'head', 'options')"
+            ),
             examples=["get", "post", "put", "delete"],
         ),
     ] = "get",
@@ -959,14 +965,18 @@ async def http_request_tool(
         }
 
         logger.info(
-            f"HTTP リクエストツール実行完了: {method.upper()} {url} -> {response_data['status']}"
+            f"HTTP リクエストツール実行完了: {method.upper()} {url} -> "
+            f"{response_data['status']}"
         )
 
         # JSON として結果を返す
         return json.dumps(result, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        error_msg = f"❌ エラー: HTTP リクエスト中にエラーが発生しました: {e.__class__.__name__}: {e}"
+        error_msg = (
+            f"❌ エラー: HTTP リクエスト中にエラーが発生しました: "
+            f"{e.__class__.__name__}: {e}"
+        )
         logger.error(error_msg, exc_info=True)
         return error_msg
 
