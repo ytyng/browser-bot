@@ -17,7 +17,7 @@ async def get_cdp_url_from_selenium_grid(selenium_grid_url: str) -> str:
 
     Args:
         selenium_grid_url: Selenium Grid の URL
-        (例: http://selenium-grid.cyberneura.com:31444)
+        (例: http://selenium-grid.example.com:4444)
 
     Returns:
         CDP WebSocket URL (例: ws://node-chrome:4444/session/xxx/se/cdp)
