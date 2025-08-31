@@ -11,6 +11,8 @@ BrowserUse を使用する MCP サーバーの実装
     - 必要な環境変数が設定されていること (OPENAI_API_KEY など)
 """
 import asyncio
+import base64
+import json
 import os
 import platform
 import socket
@@ -35,6 +37,7 @@ from browser_bot import (
     get_full_screenshot,
     get_page_source,
     get_visible_screenshot,
+    request,
     run_script,
     run_task,
     super_reload,
@@ -69,7 +72,7 @@ SELENIUM_REMOTE_URL = os.getenv(
 # MCPサーバーの設定
 server = fastmcp.FastMCP(
     name="browser_bot",
-    instructions="""ブラウザ操作のための MCP サーバーです。
+    instructions=r"""ブラウザ操作のための MCP サーバーです。
 
 このサーバーは browser_use を使用して、ローカルで起動している Chrome (:9222) に接続します。
 
@@ -504,7 +507,8 @@ async def run_javascript_in_browser(
                 "'password123'; document.querySelector('form').submit()",
                 "Array.from(document.querySelectorAll('.item')).forEach(el => "
                 "el.style.backgroundColor = 'yellow')",
-                "window.scrollTo(0, 0); setTimeout(() => window.print(), 1000)",
+                "window.scrollTo(0, 0); "
+                "setTimeout(() => window.print(), 1000)",
             ],
         ),
     ],
@@ -528,7 +532,11 @@ async def run_javascript_in_browser(
 
         success_msg = "✅ JavaScript の実行が完了しました"
         logger.info(f'{success_msg}: {result=}')
-        return {"message": success_msg, "result": result}
+        return json.dumps(
+            {"message": success_msg, "result": result},
+            ensure_ascii=False,
+            indent=2,
+        )
 
     except Exception as e:
         error_msg = f"❌ エラー: JavaScript 実行中にエラーが発生しました: {e.__class__} {e}"
@@ -740,7 +748,8 @@ async def launch_chrome_with_debug(
             message_to_append = f" (エラー: {e.__class__.__name__}: {e})"
 
         logger.warning(
-            f"ポート {CHROME_DEBUG_PORT} は使用中ですが、Chrome ではない可能性があります{message_to_append}"
+            f"ポート {CHROME_DEBUG_PORT} は使用中ですが、Chrome ではない"
+            f"可能性があります{message_to_append}"
         )
         return (
             f"⚠️ ポート {CHROME_DEBUG_PORT} は既に使用されていますが、Chrome ではない可能性があります。"
@@ -846,6 +855,129 @@ async def launch_chrome_with_debug(
 
     except Exception as e:
         error_msg = f"❌ エラー: Chrome の起動に失敗しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+@server.tool(
+    name="http_request",
+    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL で
+    HTTP リクエストを行い、結果をJSONで返します。
+認証が必要な http リソースを取得できます。
+
+パラメーター:
+    method: HTTP メソッド ('get', 'post', 'put', 'delete', 'patch', 'head', 'options')
+    url: リクエスト先の URL
+    preload_url: 指定されたらその URL に移動してからリクエストを送信
+    data: POST ボディなどのデータ (オプション)
+    headers: HTTP ヘッダー (オプション)
+
+戻り値:
+    JSON 形式。
+    {
+        "status": HTTPステータスコード,
+        "headers": レスポンスヘッダー,
+        "body": レスポンス本文。バイナリデータなら base64 エンコードして返す,
+    }
+
+""",
+)
+async def http_request_tool(
+    url: Annotated[
+        str,
+        Field(
+            description="リクエスト先の URL",
+            examples=[
+                "https://example.com",
+                "https://jsonplaceholder.typicode.com/users/1/todos",
+            ],
+        ),
+    ],
+    method: Annotated[
+        str,
+        Field(
+            description=(
+                "HTTP メソッド ('get', 'post', 'put', 'delete', "
+                "'patch', 'head', 'options')"
+            ),
+            examples=["get", "post", "put", "delete"],
+        ),
+    ] = "get",
+    preload_url: Annotated[
+        str | None,
+        Field(
+            description="指定されたらその URL に移動してからリクエストを送信",
+            default=None,
+            examples=["https://example.com/login", None],
+        ),
+    ] = None,
+    data: Annotated[
+        str | None,
+        Field(
+            description="POST ボディなどのデータ (JSON文字列またはテキスト)",
+            default=None,
+            examples=[
+                '{"name": "test", "email": "test@example.com"}',
+                "key=value&param=data",
+            ],
+        ),
+    ] = None,
+    headers: Annotated[
+        dict[str, str] | None,
+        Field(
+            description="HTTP ヘッダー",
+            default=None,
+            examples=[
+                {"Content-Type": "application/json"},
+                {"Authorization": "Bearer token123"},
+            ],
+        ),
+    ] = None,
+) -> str:
+    """Browser_bot のブラウザセッションを使って HTTP リクエストを送信する"""
+    logger.info(f"HTTP リクエストツール実行開始: {method.upper()} {url}")
+    try:
+        # kwargs を構築
+        kwargs = {}
+        if data is not None:
+            kwargs["data"] = data
+        if headers is not None:
+            kwargs["headers"] = headers
+
+        response_data = await request(
+            method=method, url=url, preload_url=preload_url, **kwargs
+        )
+
+        # レスポンス本文をテキストとして処理
+        response_body = response_data['body']
+        content_type = response_data['headers'].get("content-type", "")
+
+        # レスポンスが文字列っぽければデコードを試みる
+        # そうでなければ、バイナリデータなので base64 エンコードして返す
+        if "text" in content_type or "json" in content_type:
+            response_text = response_body.decode('utf-8', errors='replace')
+        else:
+            response_text = base64.b64encode(response_body).decode('utf-8')
+
+        result = {
+            "status": response_data['status'],
+            "headers": response_data['headers'],
+            "body": response_text,
+        }
+
+        logger.info(
+            f"HTTP リクエストツール実行完了: {method.upper()} {url} -> "
+            f"{response_data['status']}"
+        )
+
+        # JSON として結果を返す
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        error_msg = (
+            f"❌ エラー: HTTP リクエスト中にエラーが発生しました: "
+            f"{e.__class__.__name__}: {e}"
+        )
         logger.error(error_msg, exc_info=True)
         return error_msg
 

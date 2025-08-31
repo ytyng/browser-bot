@@ -17,6 +17,7 @@ import httpx
 from browser_use import Agent, BrowserSession
 from PIL import Image
 from playwright._impl._errors import TimeoutError as PlaywrightTimeoutError
+from playwright._impl._fetch import APIResponse
 from playwright.async_api import async_playwright
 
 # 環境変数を読み込む
@@ -1145,3 +1146,69 @@ if __name__ == '__main__':
     except BrowserBotError as e:
         logger.error(f"❌ エラー: {e}")
         sys.exit(1)
+
+
+async def request(
+    *, method, url: str, preload_url: str | None = None, **kwargs
+) -> APIResponse:
+    """
+    現在開いている Browser-bot のブラウザセッションを使って HTTP リクエストを送信する。
+
+    Args:
+        method: HTTP メソッド ('get', 'post', etc.)
+        url: リクエスト先の URL
+        preload_url: 指定されたらその URL に移動してからリクエストを送信
+        **kwargs: requests.request に渡す追加のキーワード引数
+          data: POST ボディ
+          headers: HTTP ヘッダー
+
+    Returns:
+        APIResponse
+            .status ステータスコード
+            .ok 成功したかどうか
+            .headers レスポンスヘッダー
+            await body() レスポンス本文
+            await json() JSONのレスポンス本文をパースしてデータを取得
+            await test() レスポンス本文をテキストで取得 (utf-8に限る)
+
+    """
+    # Chrome が起動しているか確認
+    await _check_chrome_running()
+
+    method = method.lower()
+    if not method in {
+        'get',
+        'post',
+        'put',
+        'delete',
+        'patch',
+        'head',
+        'options',
+    }:
+        error_msg = (
+            f"❌ エラー: サポートされていない HTTP メソッドです: {method}"
+        )
+        logger.error(error_msg)
+        raise BrowserBotTaskAbortedError(error_msg)
+
+    async with async_playwright() as p:
+        page, _browser = await _get_active_page(p, url=preload_url)
+
+        request_metod = getattr(page.request, method)
+
+        response: APIResponse = await request_metod(
+            url,
+            **kwargs,
+        )
+
+        # レスポンスの内容を取得（コンテキストが閉じられる前に）
+        response_body = await response.body()
+        response_headers = dict(response.headers)
+        response_status = response.status
+
+        # レスポンスデータを辞書として返す
+        return {
+            'status': response_status,
+            'headers': response_headers,
+            'body': response_body,
+        }
