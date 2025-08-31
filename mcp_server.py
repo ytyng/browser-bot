@@ -863,6 +863,7 @@ async def launch_chrome_with_debug(
     name="http_request",
     description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL で
     HTTP リクエストを行い、結果をJSONで返します。
+認証が必要な http リソースを取得できます。
 
 パラメーター:
     method: HTTP メソッド ('get', 'post', 'put', 'delete', 'patch', 'head', 'options')
