@@ -9,5 +9,5 @@ cd $(dirname $0)/../
     echo '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
     sleep 0.5
     echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_current_url", "arguments": {}}}'
-    sleep 1
+    sleep 5
 } | ./launch-mcp-server.sh
