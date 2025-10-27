@@ -307,20 +307,9 @@ async def get_page_source_code(
 @server.tool(
     name="get_visible_screenshot",
     description="""Browser_bot (Chrome) の現在アクティブなタブまたは
-指定された URL の表示されている箇所をスクリーンショットします。
-
-このツールは Browser_bot (Chrome) に Playwright を使用して接続し、以下の情報を取得します:
-- 現在表示されている領域のスクリーンショット (PNG 形式の画像データ)
-
-URL が指定された場合:
-- 指定された URL に移動してからスクリーンショットを取得
-- 現在の URL と同じ場合はスーパーリロードを実行
-
-注意: 画像サイズが大きい場合は自動的に縮小されます。
-
-使用用途:
-- 開発したページの成果確認、不具合に対する調査
-- デザインタスク
+指定された URL の表示されている箇所のスクリーンショットを取得し、
+ユーザーのホームディレクトリの Downloads フォルダに PNG 形式で保存します。
+保存したファイルパスを含むレスポンスJSON 形式でを返します。
 """,
 )
 async def get_visible_screenshot_tool(
@@ -350,8 +339,23 @@ async def get_visible_screenshot_tool(
             examples=[0.0, 1.0, 0.5, 2.0],
         ),
     ] = 0.0,
-) -> Image:
-    """現在表示されている箇所または指定された URL のスクリーンショットを取得する"""
+    # include_image_binary: Annotated[
+    #     bool,
+    #     Field(
+    #         description=(
+    #             "true を指定したら、画像バイナリを返答に含める。\n"
+    #             "false (デフォルト) の場合、ファイルパスのみを返す。"
+    #             "true の場合、レスポンスのコンテキストサイズを大きく使ってしまい、"
+    #             "正常にレスポンスが受け取れない場合があるので、"
+    #             "通常は false(デフォルト) のまま使ってください。"
+    #             "作成後のスクリーンショットにアクセスする場合、"
+    #             "レスポンスのファイルパスを操作してください。"
+    #         ),
+    #         examples=[False, True],
+    #     ),
+    # ] = False,
+) -> str:
+    """現在表示されている箇所または指定された URL のスクリーンショットを取得する。JSON を返します。"""
     logger.info(
         f"表示箇所のスクリーンショット取得ツール実行開始 "
         f"(URL: {url}, スクロール倍率: {page_y_offset_as_viewport_height})"
@@ -361,49 +365,44 @@ async def get_visible_screenshot_tool(
         result = await get_visible_screenshot(
             url=url,
             page_y_offset_as_viewport_height=page_y_offset_as_viewport_height,
+            include_image_binary=False,
         )
 
         if 'error' in result:
             logger.error(f"スクリーンショット取得エラー: {result['error']}")
-            # エラーの場合はプレースホルダー画像を返す
-            error_msg = f"Screenshot Error: {result['error']}"
-            # 小さなエラー画像データを生成するか、エラーメッセージを含むプレースホルダーを返す
-            # ここではとりあえず空のバイトデータでエラーレスポンスを作成
-            return Image(data=error_msg.encode('utf-8'), format="txt")
+            return result['error']
 
         logger.info(
             f"表示箇所のスクリーンショット取得ツール実行完了: {result['url']}"
         )
 
-        # FastMCP の Image オブジェクトで返す
-        return Image(data=result['screenshot'], format="png")
+        # JSON レスポンスを構築
+        response = {
+            'file_path': result['file_path'],
+            'url': result['url'],
+            'title': result['title'],
+        }
+
+        # include_image_binary が True の場合は画像バイナリを base64 エンコードして含める
+        # if include_image_binary:
+        #     response['image_binary_base64'] = base64.b64encode(
+        #         result['screenshot']
+        #     ).decode('utf-8')
+
+        return json.dumps(response, ensure_ascii=False, indent=2)
 
     except Exception as e:
         error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        # エラーの場合もプレースホルダーを返す
-        return Image(data=error_msg.encode('utf-8'), format="txt")
+        return error_msg
 
 
 # 全領域のスクリーンショット取得ツール
 @server.tool(
     name="get_full_screenshot",
-    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL の全領域をスクリーンショットします。
-
-このツールは Browser_bot (Chrome) にPlaywright を使用して接続し、以下の情報を取得します:
-- ページ全体のスクリーンショット (PNG 形式の画像データ)
-
-URL が指定された場合:
-- 指定された URL に移動してからスクリーンショットを取得
-- 現在の URL と同じ場合はスーパーリロードを実行
-
-注意:
-- 長いページの場合、スクロールして全体を撮影します
-- 画像サイズが大きい場合は自動的に縮小されます
-
-使用用途:
-- 開発したページの成果確認、不具合に対する調査
-- デザインタスク
+    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL
+の全領域をスクリーンショットを、ユーザーのホームディレクトリの Downloads フォルダに PNG 形式で保存します。
+保存したファイルパスを含むレスポンスJSON 形式でを返します。
 """,
 )
 async def get_full_screenshot_tool(
@@ -413,36 +412,46 @@ async def get_full_screenshot_tool(
             description=(
                 "取得する URL。指定された場合、その URL に移動してからスクリーンショットを取得します。\n"
                 "現在の URL と同じ場合、スーパーリロードが実行されます。\n"
-                "指定されない場合は、現在のページのスクリーンショットを取得します。"
+                "指定されない場合は、現在のページのスクリーンショットを取得します。\n"
+                "保存したファイルパスを含むレスポンスJSON 形式でを返します。"
             ),
             examples=["https://example.com", "https://github.com"],
         ),
     ] = None,
-) -> Image:
+) -> str:
     """ページ全体または指定された URL のスクリーンショットを取得する"""
     logger.info(f"全領域のスクリーンショット取得ツール実行開始 (URL: {url})")
 
     try:
-        result = await get_full_screenshot(url=url)
+        result = await get_full_screenshot(url=url, include_image_binary=False)
 
         if 'error' in result:
             logger.error(f"スクリーンショット取得エラー: {result['error']}")
-            # エラーの場合はプレースホルダー画像を返す
-            error_msg = f"Screenshot Error: {result['error']}"
-            return Image(data=error_msg.encode('utf-8'), format="txt")
+            return result['error']
 
         logger.info(
             f"全領域のスクリーンショット取得ツール実行完了: {result['url']}"
         )
 
-        # FastMCP の Image オブジェクトで返す
-        return Image(data=result['screenshot'], format="png")
+        # JSON レスポンスを構築
+        response = {
+            'file_path': result['file_path'],
+            'url': result['url'],
+            'title': result['title'],
+        }
+
+        # include_image_binary が True の場合は画像バイナリを base64 エンコードして含める
+        # if include_image_binary:
+        #     response['image_binary_base64'] = base64.b64encode(
+        #         result['screenshot']
+        #     ).decode('utf-8')
+
+        return json.dumps(response, ensure_ascii=False, indent=2)
 
     except Exception as e:
         error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        # エラーの場合もプレースホルダーを返す
-        return Image(data=error_msg.encode('utf-8'), format="txt")
+        return error_msg
 
 
 # JavaScript 実行ツール

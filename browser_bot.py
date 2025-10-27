@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import os
 import sys
+from datetime import datetime
 
 from logging_config import broser_console_logger, logger
 
@@ -621,7 +622,10 @@ async def get_page_source(*, url: str | None = None):
 
 
 async def get_visible_screenshot(
-    *, url: str | None = None, page_y_offset_as_viewport_height: float = 0.0
+    *,
+    url: str | None = None,
+    page_y_offset_as_viewport_height: float = 0.0,
+    include_image_binary: bool = False,
 ):
     """
     現在アクティブなタブの表示されている箇所をスクリーンショットする
@@ -630,12 +634,15 @@ async def get_visible_screenshot(
         url: 指定されたらその URL に移動してから取得
         page_y_offset_as_viewport_height: ビューポートの高さを基準にした
             スクロール量の倍率。1.0 で 1 ページ分下にスクロール
+        include_image_binary: True の場合、画像バイナリを返す。
+            デフォルト False
 
     Returns:
         dict: {
-            'screenshot': bytes,  # スクリーンショットの画像データ
-            'url': str,          # 現在のURL
-            'title': str         # ページタイトル
+            'file_path': str,     # 保存したファイルのフルパス
+            'url': str,           # 現在のURL
+            'title': str          # ページタイトル
+            'screenshot': bytes,  # 画像バイナリ (include_image_binary=True の場合のみ)
         }
     """
     logger.info(
@@ -684,31 +691,54 @@ async def get_visible_screenshot(
             screenshot_bytes = await page.screenshot()
 
             # サイズ調整
-            screenshot_bytes = _resize_image_if_needed(screenshot_bytes)
+            # やっぱりリサイズしない
+            # screenshot_bytes = _resize_image_if_needed(screenshot_bytes)
 
-            logger.info(f"表示箇所のスクリーンショット取得完了: {current_url}")
+            # ファイルに保存
+            downloads_dir = os.path.expanduser("~/Downloads")
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            filename = f"browser-bot-screenshot-{timestamp}.png"
+            file_path = os.path.join(downloads_dir, filename)
 
-            return {
-                'screenshot': screenshot_bytes,
+            with open(file_path, "wb") as f:
+                f.write(screenshot_bytes)
+
+            logger.info(
+                f"表示箇所のスクリーンショット取得完了: {current_url}, "
+                f"ファイル保存: {file_path}"
+            )
+
+            result = {
+                'file_path': file_path,
                 'url': current_url,
                 'title': title,
             }
+
+            if include_image_binary:
+                result['screenshot'] = screenshot_bytes
+
+            return result
         finally:
             await browser.close()
 
 
-async def get_full_screenshot(*, url: str | None = None):
+async def get_full_screenshot(
+    *, url: str | None = None, include_image_binary: bool = False
+):
     """
     現在アクティブなタブの全領域をスクリーンショットする
 
     Args:
         url: 指定されたらその URL に移動してから取得
+        include_image_binary: True の場合、画像バイナリを返す。
+            デフォルト False
 
     Returns:
         dict: {
-            'screenshot': bytes,  # スクリーンショットの画像データ
-            'url': str,          # 現在のURL
-            'title': str         # ページタイトル
+            'file_path': str,     # 保存したファイルのフルパス
+            'url': str,           # 現在のURL
+            'title': str          # ページタイトル
+            'screenshot': bytes,  # 画像バイナリ (include_image_binary=True の場合のみ)
         }
     """
     logger.info("全領域のスクリーンショット取得開始")
@@ -734,17 +764,35 @@ async def get_full_screenshot(*, url: str | None = None):
             screenshot_bytes = await page.screenshot(full_page=True)
 
             # サイズ調整（全領域は特に大きくなりがちなので、より小さい制限を設定）
-            screenshot_bytes = _resize_image_if_needed(
-                screenshot_bytes, max_size_bytes=800000
+            # やっぱりリサイズしない
+            # screenshot_bytes = _resize_image_if_needed(
+            #     screenshot_bytes, max_size_bytes=800000
+            # )
+
+            # ファイルに保存
+            downloads_dir = os.path.expanduser("~/Downloads")
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            filename = f"browser-bot-screenshot-{timestamp}.png"
+            file_path = os.path.join(downloads_dir, filename)
+
+            with open(file_path, "wb") as f:
+                f.write(screenshot_bytes)
+
+            logger.info(
+                f"全領域のスクリーンショット取得完了: {current_url}, "
+                f"ファイル保存: {file_path}"
             )
 
-            logger.info(f"全領域のスクリーンショット取得完了: {current_url}")
-
-            return {
-                'screenshot': screenshot_bytes,
+            result = {
+                'file_path': file_path,
                 'url': current_url,
                 'title': title,
             }
+
+            if include_image_binary:
+                result['screenshot'] = screenshot_bytes
+
+            return result
         finally:
             await browser.close()
 
