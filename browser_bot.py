@@ -198,7 +198,7 @@ def get_llm():
 
     return ChatOpenAI(
         model=_llm_model_name or "gpt-5-mini",
-        temperature=0.0,
+        # 　temperature=0.0,
     )
 
 
@@ -273,10 +273,12 @@ async def run_task(
             )
             # エラーが発生しても続行（Agent が処理する）
 
+    llm_model = get_llm()
+    logger.info(f"使用する LLM モデル: {llm_model.__class__.__name__}")
     # Agent を作成
     agent = Agent(
         task=task,
-        llm=get_llm(),
+        llm=llm_model,
         browser_session=browser_session,
     )
 
