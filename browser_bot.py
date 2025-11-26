@@ -192,13 +192,17 @@ def get_llm():
             return ChatGoogleGenerativeAI(
                 model=_llm_model_name, temperature=0.0
             )
+        elif _llm_model_name.startswith('claude'):
+            # Anthropic Claude
+            from langchain_anthropic import ChatAnthropic
+
+            return ChatAnthropic(model=_llm_model_name, temperature=0.0)
 
     # default: OpenAI
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
         model=_llm_model_name or "gpt-5-mini",
-        # 　temperature=0.0,
     )
 
 
