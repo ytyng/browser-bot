@@ -1140,11 +1140,48 @@ async def user_script():
             logger.info("ブラウザ接続を閉じました")
 
 
+epilog = '''
+# Using javascript script example
+[tests/test-script.sh]
+
+```shell
+echo "
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+document.querySelector('.header .search-form input.header-search-input').click();
+await sleep(1000);
+document.querySelector('#search-modal-input').value = 'ハイキュー';
+await sleep(1000);
+document.querySelector('#search-modal-input').dispatchEvent(new Event('input', { bubbles: true }));
+await sleep(1000);
+document.querySelector('button[data-annotate=\"search-submit-button\"]').click();
+await sleep(2000);
+return '完了しました。 URL: ' + window.location.href;
+" | .venv/bin/python browser_bot.py --script --url https://www.mangazenkan.com
+```
+
+# Using python script example
+[tests/test-python-script.sh]
+
+```shell
+echo "
+await asyncio.sleep(1)
+await page.click('.header .search-form span.header-search-input')
+await page.fill('#search-modal-input', 'ハイキュー')
+await asyncio.sleep(1)
+await page.click('button[data-annotate=\"search-submit-button\"]')
+await asyncio.sleep(2)
+return f'完了しました。 URL: {page.url}'
+" | .venv/bin/python browser_bot.py --python-script --url https://www.mangazenkan.com
+```
+'''
+
 if __name__ == '__main__':
     dotenv.load_dotenv()
 
     parser = argparse.ArgumentParser(
-        description="Run a browser automation task."
+        description="Run a browser automation task.",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         '--max-steps',

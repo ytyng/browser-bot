@@ -83,25 +83,49 @@ Chrome に対しての操作指示をする場合、このツールを使って�
 認証や複雑なマウス操作をユーザーにやってもらい、
 文字入力やボタンクリックなど単調な作業をツールに任せることができます。
 
-使用例:
+# 使用例
 - Web サイトの自動操作
 - フォームの自動入力
 - 情報の自動収集
 - UI テストの自動化
 
-注意事項:
+# 注意事項
 - Chrome が --remote-debugging-port=9222 で起動している必要があります
 - launch-chrome.sh スクリプトを使用して Chrome を起動してください
 
-補足:
+# 補足
 ログは {log_file} に保存されます。必要に応じて確認してください。
 
 ログを、 [browser-console] で grep すると、ブラウザのコンソールログに限定して取得できます。
 
-例:
+## 例
 ```
 tail -f {log_file} | grep '\[browser-console\]'
 ```
+
+# 長いタスクを実行する場合 (Python スクリプトを動かす)
+MCPツールではなく、CLI の browser_bot のインターフェイスがあります。
+
+```shell
+echo "<long-python-script>" | browser-bot --python-script  --url "https://example.com/" --max-steps 10
+```
+といった形で実行できます。
+
+## python スクリプト例
+```python
+await asyncio.sleep(1)
+await page.click('.header .search-form span.header-search-input')
+await page.fill(
+    '#search-modal-input',
+    'ハイキュー',
+)
+
+await asyncio.sleep(1)
+await page.click('button[data-annotate=\"search-submit-button\"]')
+```
+
+## 詳細は `browser-bot` コマンドを参照してください。
+
 """,
 )
 
@@ -242,21 +266,10 @@ async def browser_use_local_chrome(
     name="get_page_source_code",
     description="""Browser_bot (Chrome) の現在アクティブなタブ (または指定された URL のソースコード)を取得します。
 
-このツールは Browser_bot (Chrome) の に Playwright を使用して接続し、以下の情報を取得します:
-- ページのソースコード (HTML)
-- 現在の URL
-- ページタイトル
-
-URL が指定された場合:
-- 指定された URL に移動してからソースコードを取得
-- 現在の URL と同じ場合はスーパーリロードを実行
+現在の URL とページタイトルも取得します。
 
 ソースコードはユーザーのホームディレクトリの Downloads フォルダに HTML 形式で保存します。
 保存したファイルパスを含むレスポンスを JSON 形式で返します。
-
-使用用途:
-- 開発したページの成果確認、不具合に対する調査
-- 特にエラーメッセージを変換無く取得したい時
 """,
 )
 async def get_page_source_code(
