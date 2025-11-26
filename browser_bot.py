@@ -583,16 +583,16 @@ def _resize_image_if_needed(
 
 async def get_page_source(*, url: str | None = None):
     """
-    現在アクティブなタブのソースコードを取得する
+    現在アクティブなタブのソースコードを取得し、Downloads フォルダに保存する
 
     Args:
         url: 指定されたらその URL に移動してから取得
 
     Returns:
         dict: {
-            'source': str,  # ページのソースコード
-            'url': str,     # 現在のURL
-            'title': str    # ページタイトル
+            'file_path': str,  # 保存したファイルのフルパス
+            'url': str,        # 現在のURL
+            'title': str       # ページタイトル
         }
     """
     logger.info("ソースコード取得開始")
@@ -616,9 +616,20 @@ async def get_page_source(*, url: str | None = None):
 
             source = await page.content()
 
-            logger.info(f"ソースコード取得完了: {current_url}")
+            # ファイルに保存
+            downloads_dir = os.path.expanduser("~/Downloads")
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            filename = f"browser-bot-source-{timestamp}.html"
+            file_path = os.path.join(downloads_dir, filename)
 
-            return {'source': source, 'url': current_url, 'title': title}
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(source)
+
+            logger.info(
+                f"ソースコード取得完了: {current_url}, ファイル保存: {file_path}"
+            )
+
+            return {'file_path': file_path, 'url': current_url, 'title': title}
         finally:
             await browser.close()
 

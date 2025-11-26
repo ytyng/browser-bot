@@ -117,20 +117,24 @@ tail -f {log_file} | grep '\[browser-console\]'
 ページの状態を確認するには、 get_page_source_code や
 get_visible_screenshot、get_full_screenshot ツールを使用してください。
 
-パラメーター:
-    task_text (str):
-        実行したいタスクの説明。 browser_use のタスクプロンプトです。
-        例: "https://example.com を開いて、ログインボタンをクリックしてください"
+# パラメーター
+task_text (str):
+    実行したいタスクの説明。 browser_use のタスクプロンプトです。
+    例: "https://example.com を開いて、ログインボタンをクリックしてください"
 
-    url (str | None):
-        最初に開く URL。指定された場合、タスク実行前にこの URL に移動します。
+url (str | None):
+    最初に開く URL。指定された場合、タスク実行前にこの URL に移動します。
 
-戻り値:
-    str: タスクの実行結果。成功時は結果の説明、失敗時はエラーメッセージ。
+# 戻り値
+str: タスクの実行結果。成功時は結果の説明、失敗時はエラーメッセージ。
 
-使用用途:
+# 使用用途
 - 開発したウェブサイトを実際に操作しての動作確認
 - ブラウザを使う定型処理の実行
+
+# 注意事項
+比較的不安定なので、非推奨です。
+可能な限り、 run_javascript_in_browser ツールを使用してください。
 """,
 )
 async def browser_use_local_chrome(
@@ -247,6 +251,8 @@ URL が指定された場合:
 - 指定された URL に移動してからソースコードを取得
 - 現在の URL と同じ場合はスーパーリロードを実行
 
+ソースコードはユーザーのホームディレクトリの Downloads フォルダに HTML 形式で保存します。
+保存したファイルパスを含むレスポンスを JSON 形式で返します。
 
 使用用途:
 - 開発したページの成果確認、不具合に対する調査
@@ -276,26 +282,16 @@ async def get_page_source_code(
             logger.error(f"ソースコード取得エラー: {result['error']}")
             return result['error']
 
-        # 結果を整形して返す
-        response = f"""# 取得結果
-
-## URL
-
-{result['url']}
-
-## タイトル
-
-{result['title']}
-
-## ソースコード
-
-```html
-{result['source']}
-```
-"""
-
         logger.info(f"ソースコード取得ツール実行完了: {result['url']}")
-        return response
+
+        # JSON レスポンスを構築
+        response = {
+            'file_path': result['file_path'],
+            'url': result['url'],
+            'title': result['title'],
+        }
+
+        return json.dumps(response, ensure_ascii=False, indent=2)
 
     except Exception as e:
         error_msg = f"❌ エラー: ソースコード取得中に予期しないエラーが発生しました: {str(e)}"
@@ -461,25 +457,25 @@ async def get_full_screenshot_tool(
 
 このツールは Browser_bot (Chrome) に Playwright を使用して接続し、指定された JavaScript コードを実行します。
 
-実行方法:
+# 実行方法
 - 渡された JavaScript コードは自動的に async 即時関数 (async () => { ... })() でラップされて実行されます
 - そのため、await を使用した非同期処理も記述できます
 - return 文を使用すると、実行結果を取得することができます
 
-URL が指定された場合:
+# パラメーター `url` が指定された場合
 - 指定された URL に移動してから JavaScript を実行
 - ページの読み込みが完了してから実行
 
-使用用途:
+# 使用用途
 - 開発したページでの JavaScript 動作確認
 - DOM 操作やイベント発火などの自動化
 - ページ状態の動的な変更
 - 複雑な操作の自動化（browser_use では困難な場合）
 
-注意:
+# 注意
 - エラーが発生した場合は、ローカルコンピューターの /tmp/browser-bot.log に記録されます。
 
-戻り値:
+# 戻り値
 正常終了した場合は、 {
     "message": "✅ JavaScript の実行が完了しました",
     "result": 実行結果
@@ -561,11 +557,6 @@ async def run_javascript_in_browser(
 このツールは Browser_bot (Chrome) に Playwright を使用して接続し、以下の情報を取得します:
 - 現在の URL
 - ページタイトル
-
-使用用途:
-- 現在のページ状況の確認
-- ページ遷移後の確認
-- デバッグ用の状態取得
 """,
 )
 async def get_current_url_tool() -> str:
@@ -604,16 +595,6 @@ async def get_current_url_tool() -> str:
 @server.tool(
     name="super_reload",
     description="""Browser_bot (Chrome) の現在アクティブなタブでスーパーリロード (キャッシュを無視してリロード) を実行します。
-
-このツールは Browser_bot (Chrome) に Playwright を使用して接続し、スーパーリロードを実行します。
-
-URL が指定された場合:
-- 指定された URL に移動してからスーパーリロード
-
-使用用途:
-- キャッシュを無視した最新のページ取得
-- 開発中のページの強制更新
-- JavaScript やCSS の変更を反映させたい場合
 """,
 )
 async def super_reload_tool(
@@ -677,23 +658,7 @@ async def super_reload_tool(
 @server.tool(
     name="launch_chrome_with_debug",
     description="""Chrome をデバッグポート 9222 で起動します（ゲストモード/通常モード選択可能）。
-
-このツールは、browser_bot が接続するための Chrome ブラウザを起動します。
 既に起動している場合は、その旨を通知します。
-
-機能:
-- ポート 9222 の使用状況をチェック
-- 既存の Chrome プロセスを検知
-- 新規 Chrome をゲストモードまたは通常モードで起動
-- プラットフォーム対応 (macOS, Linux, Windows)
-
-モード選択:
-- ゲストモード (as_guest=True): プライバシー保護、クリーンな環境でのテスト
-- 通常モード (as_guest=False): 既存のプロファイルやデータを使用
-
-使用用途:
-- browser_bot を使用する前の Chrome 起動
-- 開発・テスト環境の準備
 """,
 )
 async def launch_chrome_with_debug(
@@ -874,20 +839,14 @@ async def launch_chrome_with_debug(
     HTTP リクエストを行い、結果をJSONで返します。
 認証が必要な http リソースを取得できます。
 
-パラメーター:
-    method: HTTP メソッド ('get', 'post', 'put', 'delete', 'patch', 'head', 'options')
-    url: リクエスト先の URL
-    preload_url: 指定されたらその URL に移動してからリクエストを送信
-    data: POST ボディなどのデータ (オプション)
-    headers: HTTP ヘッダー (オプション)
-
-戻り値:
-    JSON 形式。
-    {
-        "status": HTTPステータスコード,
-        "headers": レスポンスヘッダー,
-        "body": レスポンス本文。バイナリデータなら base64 エンコードして返す,
-    }
+# 戻り値
+```json
+{
+    "status": HTTPステータスコード,
+    "headers": レスポンスヘッダー,
+    "body": レスポンス本文。バイナリデータなら base64 エンコードして返す,
+}
+```
 
 """,
 )
