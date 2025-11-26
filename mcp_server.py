@@ -124,7 +124,7 @@ await asyncio.sleep(1)
 await page.click('button[data-annotate=\"search-submit-button\"]')
 ```
 
-## 詳細は `browser-bot` コマンドを参照してください。
+詳細は `browser-bot --help` コマンドを参照してください。
 
 """,
 )
