@@ -22,14 +22,13 @@ from typing import Annotated
 
 import httpx
 
-from logging_config import log_file, logger
+from logging_config import logger
 
 # テレメトリを無効化
 os.environ['ANONYMIZED_TELEMETRY'] = 'false'
 
 import fastmcp
 from dotenv import load_dotenv
-from fastmcp.utilities.types import Image
 from pydantic import Field
 
 from browser_bot import (
