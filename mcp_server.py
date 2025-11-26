@@ -126,6 +126,7 @@ await page.click('button[data-annotate=\"search-submit-button\"]')
 
 詳細は `browser-bot --help` コマンドを参照してください。
 
+繰り返し行うようなタスクは、 browser-bot --python-script を含むシェルスクリプトにすることをおすすめします。
 """,
 )
 
@@ -157,8 +158,10 @@ str: タスクの実行結果。成功時は結果の説明、失敗時はエラ
 - ブラウザを使う定型処理の実行
 
 # 注意事項
-比較的不安定なので、非推奨です。
-可能な限り、 run_javascript_in_browser ツールを使用してください。
+不安定だし遅いので、非推奨です。
+
+可能な限り、 run_javascript_in_browser ツールを使うか、
+CLI の `browser-bot --python-script` を使用してください。
 """,
 )
 async def browser_use_local_chrome(
