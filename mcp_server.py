@@ -37,6 +37,7 @@ from browser_bot import (
     get_page_source,
     get_visible_screenshot,
     request,
+    run_lighthouse,
     run_script,
     run_task,
     super_reload,
@@ -106,7 +107,7 @@ tail -f {log_file} | grep '\[browser-console\]'
 MCPツールではなく、CLI の browser_bot のインターフェイスがあります。
 
 ```shell
-echo "<long-python-script>" | browser-bot --python-script  --url "https://example.com/" --max-steps 10
+echo "<script>" | browser-bot --python-script --url "https://..." --max-steps 10
 ```
 といった形で実行できます。
 
@@ -959,6 +960,123 @@ async def http_request_tool(
     except Exception as e:
         error_msg = (
             f"❌ エラー: HTTP リクエスト中にエラーが発生しました: "
+            f"{e.__class__.__name__}: {e}"
+        )
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+@server.tool(
+    name="lighthouse_audit",
+    description="""Google Lighthouse を使ってウェブページのパフォーマンス監査を実行します。
+
+リモートデバッグポート（9222）で起動している Chrome に接続し、
+Lighthouse を実行してパフォーマンススコアと詳細メトリクスを取得します。
+
+# 前提条件
+- Node.js と npm がインストールされていること
+- Chrome が --remote-debugging-port=9222 で起動していること
+
+# 戻り値
+```json
+{
+    "url": "監査した URL",
+    "scores": {
+        "performance": 85,
+        "accessibility": 92,
+        ...
+    },
+    "metrics": {
+        "LCP": {"value": 1234.5, "display": "1.2 s", "score": 90},
+        "FCP": {"value": 500.0, "display": "0.5 s", "score": 95},
+        ...
+    },
+    "report_path": "HTMLレポートのパス",
+    "json_path": "JSONレポートのパス"
+}
+```
+
+# 使用例
+- パフォーマンスのみ監査: categories に ["performance"] を指定
+- 全カテゴリ監査: categories に全5カテゴリを指定
+- モバイル表示で監査: device に "mobile" を指定
+""",
+)
+async def lighthouse_audit_tool(
+    url: Annotated[
+        str | None,
+        Field(
+            description=(
+                "監査対象の URL。指定しない場合は現在アクティブなタブの URL を使用"
+            ),
+            default=None,
+            examples=[
+                "https://example.com",
+                "https://www.google.com",
+                None,
+            ],
+        ),
+    ] = None,
+    categories: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "監査カテゴリのリスト。"
+                "選択肢: 'performance', 'accessibility', 'best-practices', 'seo', 'pwa'。"
+                "指定しない場合は performance のみ"
+            ),
+            default=None,
+            examples=[
+                ["performance"],
+                ["performance", "accessibility"],
+                ["performance", "accessibility", "best-practices", "seo"],
+            ],
+        ),
+    ] = None,
+    device: Annotated[
+        str,
+        Field(
+            description=(
+                "エミュレートするデバイス。'desktop' または 'mobile'"
+            ),
+            default="desktop",
+            examples=["desktop", "mobile"],
+        ),
+    ] = "desktop",
+    timeout_seconds: Annotated[
+        int,
+        Field(
+            description="タイムアウト秒数",
+            default=120,
+            ge=30,
+            le=300,
+        ),
+    ] = 120,
+) -> str:
+    """
+    Lighthouse を実行してパフォーマンス監査を行う
+    """
+    logger.info(
+        f"Lighthouse 監査ツール実行開始: url={url}, categories={categories}"
+    )
+
+    try:
+        result = await run_lighthouse(
+            url=url,
+            categories=categories,
+            device=device,
+            timeout_seconds=timeout_seconds,
+        )
+
+        logger.info(
+            f"Lighthouse 監査完了: {result['url']}, scores={result['scores']}"
+        )
+
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        error_msg = (
+            f"❌ エラー: Lighthouse 監査中にエラーが発生しました: "
             f"{e.__class__.__name__}: {e}"
         )
         logger.error(error_msg, exc_info=True)

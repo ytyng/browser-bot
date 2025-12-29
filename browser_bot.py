@@ -2,7 +2,10 @@
 
 import argparse
 import asyncio
+import json
 import os
+import shutil
+import subprocess
 import sys
 from datetime import datetime
 
@@ -1155,7 +1158,8 @@ document.querySelector('.header .search-form input.header-search-input').click()
 await sleep(1000);
 document.querySelector('#search-modal-input').value = 'ハイキュー';
 await sleep(1000);
-document.querySelector('#search-modal-input').dispatchEvent(new Event('input', { bubbles: true }));
+const e = new Event('input', { bubbles: true });
+document.querySelector('#search-modal-input').dispatchEvent(e);
 await sleep(1000);
 document.querySelector('button[data-annotate=\"search-submit-button\"]').click();
 await sleep(2000);
@@ -1314,3 +1318,191 @@ async def request(
             'headers': response_headers,
             'body': response_body,
         }
+
+
+async def run_lighthouse(
+    *,
+    url: str | None = None,
+    categories: list[str] | None = None,
+    device: str = 'desktop',
+    timeout_seconds: int = 120,
+):
+    """
+    Lighthouse を使ってパフォーマンス監査を実行する
+
+    Args:
+        url: 監査対象の URL。指定しない場合は現在アクティブなタブの URL を使用
+        categories: 監査カテゴリのリスト。
+            選択肢: 'performance', 'accessibility', 'best-practices', 'seo', 'pwa'
+            指定しない場合は performance のみ
+        device: エミュレートするデバイス ('desktop' または 'mobile')
+        timeout_seconds: タイムアウト秒数 (デフォルト: 120秒)
+
+    Returns:
+        dict: {
+            'url': str,           # 監査した URL
+            'scores': dict,       # カテゴリ別スコア (0-100)
+            'metrics': dict,      # 詳細メトリクス (LCP, FCP, TBT など)
+            'report_path': str,   # HTML レポートのファイルパス
+            'json_path': str,     # JSON レポートのファイルパス
+        }
+    """
+    logger.info("Lighthouse 監査開始")
+
+    # npx が使用可能か確認
+    npx_path = shutil.which('npx')
+    if not npx_path:
+        error_msg = (
+            "❌ エラー: npx コマンドが見つかりません。"
+            "Node.js と npm がインストールされているか確認してください。"
+        )
+        logger.error(error_msg)
+        raise BrowserRuntimeError(error_msg)
+
+    # URL が指定されていない場合は現在のページの URL を取得
+    if not url:
+        await _check_chrome_running()
+        async with async_playwright() as p:
+            page, browser = await _get_active_page(
+                p, url=None, create_new_page=False
+            )
+            url = page.url
+            await browser.close()
+        logger.info(f"現在のページの URL を使用: {url}")
+
+    # カテゴリのデフォルト値
+    if not categories:
+        categories = ['performance']
+
+    # 有効なカテゴリを検証
+    valid_categories = {
+        'performance',
+        'accessibility',
+        'best-practices',
+        'seo',
+        'pwa',
+    }
+    invalid_categories = set(categories) - valid_categories
+    if invalid_categories:
+        error_msg = (
+            f"❌ エラー: 無効なカテゴリ: {invalid_categories}。"
+            f"有効なカテゴリ: {valid_categories}"
+        )
+        logger.error(error_msg)
+        raise BrowserBotTaskAbortedError(error_msg)
+
+    # デバイスの検証
+    valid_devices = {'desktop', 'mobile'}
+    if device not in valid_devices:
+        error_msg = (
+            f"❌ エラー: 無効なデバイス: {device}。"
+            f"有効なデバイス: {valid_devices}"
+        )
+        logger.error(error_msg)
+        raise BrowserBotTaskAbortedError(error_msg)
+
+    # 出力ファイルパスを準備
+    downloads_dir = os.path.expanduser("~/Downloads")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    base_filename = f"lighthouse-{timestamp}"
+    json_path = os.path.join(downloads_dir, f"{base_filename}.json")
+    html_path = os.path.join(downloads_dir, f"{base_filename}.html")
+
+    # Chrome のデバッグポートを取得
+    chrome_port = CHROME_DEBUG_URL.split(':')[-1]
+
+    # Lighthouse コマンドを構築
+    cmd = [
+        npx_path,
+        'lighthouse',
+        url,
+        f'--port={chrome_port}',
+        '--output=json,html',
+        f'--output-path={os.path.join(downloads_dir, base_filename)}',
+        f'--only-categories={",".join(categories)}',
+        '--quiet',
+        '--chrome-flags=--ignore-certificate-errors',
+    ]
+
+    # デバイス設定
+    if device == 'mobile':
+        cmd.append('--emulated-form-factor=mobile')
+    else:
+        cmd.append('--emulated-form-factor=desktop')
+        cmd.append('--preset=desktop')
+
+    logger.info(f"Lighthouse コマンド実行: {' '.join(cmd)}")
+
+    try:
+        # Lighthouse を実行
+        result = await asyncio.to_thread(
+            subprocess.run,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+
+        if result.returncode != 0:
+            error_msg = (
+                f"❌ Lighthouse 実行エラー (code={result.returncode}): "
+                f"{result.stderr[:500] if result.stderr else 'unknown error'}"
+            )
+            logger.error(error_msg)
+            raise BrowserBotTaskFailedError(error_msg)
+
+        # JSON レポートを読み込んでスコアとメトリクスを抽出
+        with open(json_path, 'r', encoding='utf-8') as f:
+            report = json.load(f)
+
+        # カテゴリ別スコアを抽出
+        scores = {}
+        for cat_id, cat_data in report.get('categories', {}).items():
+            scores[cat_id] = round(cat_data.get('score', 0) * 100)
+
+        # 主要メトリクスを抽出
+        audits = report.get('audits', {})
+        metrics = {}
+
+        # Performance メトリクス
+        metric_keys = {
+            'first-contentful-paint': 'FCP',
+            'largest-contentful-paint': 'LCP',
+            'total-blocking-time': 'TBT',
+            'cumulative-layout-shift': 'CLS',
+            'speed-index': 'SI',
+            'interactive': 'TTI',
+        }
+        for audit_key, metric_name in metric_keys.items():
+            if audit_key in audits:
+                audit = audits[audit_key]
+                metrics[metric_name] = {
+                    'value': audit.get('numericValue'),
+                    'display': audit.get('displayValue'),
+                    'score': round((audit.get('score') or 0) * 100),
+                }
+
+        logger.info(f"Lighthouse 監査完了: {url}, スコア: {scores}")
+
+        return {
+            'url': url,
+            'scores': scores,
+            'metrics': metrics,
+            'report_path': html_path,
+            'json_path': json_path,
+        }
+
+    except subprocess.TimeoutExpired:
+        error_msg = (
+            f"❌ Lighthouse 実行がタイムアウトしました ({timeout_seconds}秒)"
+        )
+        logger.error(error_msg)
+        raise BrowserBotTaskFailedError(error_msg)
+    except FileNotFoundError:
+        error_msg = "❌ Lighthouse レポートファイルが見つかりません"
+        logger.error(error_msg)
+        raise BrowserBotTaskFailedError(error_msg)
+    except json.JSONDecodeError as e:
+        error_msg = f"❌ Lighthouse レポートの解析に失敗: {e}"
+        logger.error(error_msg)
+        raise BrowserBotTaskFailedError(error_msg)
