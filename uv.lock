@@ -183,13 +183,14 @@ wheels = [
 
 [[package]]
 name = "browser-use"
-version = "0.9.6"
+version = "0.11.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "anthropic" },
     { name = "anyio" },
     { name = "authlib" },
+    { name = "browser-use-sdk" },
     { name = "bubus" },
     { name = "cdp-use" },
     { name = "click" },
@@ -223,9 +224,24 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid7" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b5/99/97e7b1694b329b45cef64530203c4162cfa8597560f483d731e9d97a9de2/browser_use-0.9.6.tar.gz", hash = "sha256:655c0a7ac3070759fd00f96b86215416f801f48444d2e6a28ba26eae86f22238", size = 472444 }
+sdist = { url = "https://files.pythonhosted.org/packages/77/42/aacaba1ee2599101ccb14fde3c4732d6e994d9d616b3a7b9c12f8ac5d5b4/browser_use-0.11.2.tar.gz", hash = "sha256:543face2fd5662ee89526d2099a79e01468b51784cdcc85faa36a81fdae4aa68", size = 501474 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/c1/11a9b7c09272dc1dc99c1dcb06513ef1ec334ba828803d4ffce8d28e42fb/browser_use-0.9.6-py3-none-any.whl", hash = "sha256:5cdb672bfe7f1a1d97b2f4e067585d0d8929483ccb7a1697c6d689b7761a3fa8", size = 561184 },
+    { url = "https://files.pythonhosted.org/packages/3d/04/9d0b9ee9b176fe329d424bf4337982b021b264295aa2fb9a7aef885abd61/browser_use-0.11.2-py3-none-any.whl", hash = "sha256:6ac57c0e2a495749fc83c1faee85001737567f8cd4301ebfcda2a886018a325b", size = 599219 },
+]
+
+[[package]]
+name = "browser-use-sdk"
+version = "2.0.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-core" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/42/8c071273009a164e101c257a51a5b1c763f06e801a2dab2bcd24357121d5/browser_use_sdk-2.0.12.tar.gz", hash = "sha256:7b8c03af2d6c5a00f8033ddffc991a43df72937649c8b5e114766778074c94b4", size = 68107 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/5c/a1521820403c61e4164a4b4812bed34f21636439e00173efca5efc2a86b9/browser_use_sdk-2.0.12-py3-none-any.whl", hash = "sha256:f7ff6fd0fc84c2d73b84ab98fa8a282f617c12b5d1463dbe6dfdd7fa0323a832", size = 140869 },
 ]
 
 [[package]]
@@ -496,7 +512,7 @@ selenium-remote = [
 
 [package.metadata]
 requires-dist = [
-    { name = "browser-use", specifier = ">=0.3.1" },
+    { name = "browser-use", specifier = ">=0.11.2" },
     { name = "fastmcp", specifier = ">=2.8.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pillow", specifier = ">=11.2.1" },

@@ -196,8 +196,8 @@ def get_llm():
                 model=_llm_model_name, temperature=0.0
             )
         elif _llm_model_name.startswith('claude'):
-            # Anthropic Claude
-            from langchain_anthropic import ChatAnthropic
+            # Anthropic Claude (browser_use から直接インポート)
+            from browser_use import ChatAnthropic
 
             return ChatAnthropic(model=_llm_model_name, temperature=0.0)
 
