@@ -799,10 +799,16 @@ async def launch_chrome_with_debug(
     ]
 
     if as_guest:
-        # ゲストモードの場合
-        chrome_args.append("--guest")
+        # ゲストモードでも --user-data-dir が必要
+        # (既存 Chrome が起動中だと別インスタンスにならないため)
+        user_data_dir = os.path.expanduser(
+            "~/.google-chrome-debug-guest"
+        )
+        chrome_args.extend([
+            f"--user-data-dir={user_data_dir}",
+            "--guest",
+        ])
     else:
-        # 通常モードの場合
         user_data_dir = os.path.expanduser("~/.google-chrome-debug")
         chrome_args.append(f"--user-data-dir={user_data_dir}")
 
