@@ -1,68 +1,70 @@
 # Browser Bot
 
-Chrome の自動操作を行う MCP (Model Context Protocol) サーバーです。browser_use を使用して、ローカルで起動している Chrome (:9222) に接続し、Web ブラウザの操作を自動化します。
+![](./documents/images/featured-image.png)
 
-## 主な機能
+An MCP (Model Context Protocol) server for automating Chrome browser operations. It connects to a locally running Chrome instance (:9222) using the browser_use library to automate web browser interactions.
 
-- **ブラウザ自動操作**: 自然言語による指示でブラウザ操作を実行
-- **スクリーンショット取得**: 表示領域または全領域のスクリーンショット
-- **ソースコード取得**: 現在表示されているページの HTML ソース
-- **MCP プロトコル対応**: Claude などの AI アシスタントからの操作が可能
+## Features
 
-## 必要な環境
+- **Browser Automation**: Execute browser operations via natural language instructions
+- **Screenshot Capture**: Take screenshots of the visible area or the entire page
+- **Source Code Retrieval**: Get the HTML source of the currently displayed page
+- **MCP Protocol Support**: Operable from AI assistants such as Claude
+
+## Requirements
 
 - Python 3.12+
-- Chrome ブラウザ
-- OpenAI API キー または Google API キー (Gemini 使用時)
-- uv (Python パッケージマネージャー)
+- Chrome browser
+- OpenAI API key or Google API key (when using Gemini)
+- uv (Python package manager)
 
-## インストールと設定
+## Installation and Setup
 
-### 1. 依存関係のインストール
+### 1. Install Dependencies
 
 ```shell
 uv sync
 ```
 
-### 2. 環境変数の設定
+### 2. Configure Environment Variables
 
-`.env` ファイルを作成し、以下を設定する
+Create a `.env` file with the following settings:
 
-#### OpenAI を使う場合
+#### Using OpenAI
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
-# デフォルトは gpt-5-mini
-# 他のモデルを使う場合は BROWSER_USE_LLM_MODEL を設定
+# Default model is gpt-5-mini
+# Set BROWSER_USE_LLM_MODEL to use a different model
 # BROWSER_USE_LLM_MODEL=gpt-4o
 ```
 
-#### Google Gemini を使う場合
+#### Using Google Gemini
 
 ```env
 GOOGLE_API_KEY=your_google_api_key_here
 BROWSER_USE_LLM_MODEL=gemini-2.5-flash
 ```
 
-### 3. Chrome の起動
+### 3. Launch Chrome
 
-デバッグポート付きで Chrome を起動：
+Start Chrome with the debug port enabled:
 
 ```shell
 ./launch-chrome.sh
 ```
 
-## 使用方法
+## Usage
 
-### MCP サーバーとして使用
+### As an MCP Server
 
 ```shell
 ./launch-mcp-server.sh
 ```
 
-### 直接実行
+### Direct Execution
 
-パスに以下のスクリプトを登録する
+Register the following script in your PATH:
 
 browser-bot
 ```shell
@@ -73,76 +75,76 @@ cd ${HOME}/<your-workspace>/browser-bot
 ```
 
 ```shell
-echo "https://www.google.com を開いて、'Python tutorial' を検索してください" | browser-bot
+echo "Open https://www.google.com and search for 'Python tutorial'" | browser-bot
 ```
 
-## MCP ツールの仕様
+## MCP Tool Specifications
 
 ### 1. browser_use_local_chrome_9222
 
-Chrome ブラウザでの自動操作を実行するツールです。
+Executes automated operations in the Chrome browser.
 
-#### パラメーター
+#### Parameters
 
-- **task_text** (str, 必須): 実行したいブラウザ操作タスクの詳細な説明
-- **max_steps** (int, オプション): 最大実行ステップ数（デフォルト: 7、範囲: 1-30）
+- **task_text** (str, required): Detailed description of the browser operation task to execute
+- **max_steps** (int, optional): Maximum number of execution steps (default: 7, range: 1-30)
 
 ### 2. get_page_source
 
-現在アクティブなタブのソースコードを取得します。ページの HTML 構造を解析したい時に使用します。
+Retrieves the source code of the currently active tab. Use this when you want to analyze the HTML structure of a page.
 
 ### 3. get_visible_screenshot
 
-現在アクティブなタブの表示されている箇所をスクリーンショットします。現在見えている部分の状態を確認したい時に使用します。
+Takes a screenshot of the visible area of the currently active tab. Use this to check the current state of what's displayed.
 
 ### 4. get_full_screenshot
 
-現在アクティブなタブの全領域をスクリーンショットします。ページ全体のレイアウトを確認したい時に使用します。
+Takes a screenshot of the entire page of the currently active tab. Use this to check the overall page layout.
 
-#### タスクの書き方のポイント
+#### Tips for Writing Tasks
 
-1. **URL は完全な形式で記述**
+1. **Use fully qualified URLs**
    - ✅ `https://example.com`
    - ❌ `example.com`
 
-2. **クリックする要素は具体的に説明**
-   - ✅ `'送信'と書かれた青いボタン`
-   - ❌ `ボタン`
+2. **Describe click targets specifically**
+   - ✅ `the blue button labeled 'Submit'`
+   - ❌ `the button`
 
-3. **入力する内容は明確に指定**
-   - ✅ `メールアドレス欄に 'test@example.com' を入力`
-   - ❌ `メールアドレスを入力`
+3. **Specify input content clearly**
+   - ✅ `type 'test@example.com' in the email field`
+   - ❌ `enter the email address`
 
-4. **複数の操作は箇条書きで順序立てて記述**
+4. **List multiple operations in order using bullet points**
 
-#### 使用例
+#### Examples
 
-**簡単な検索操作 (3-5ステップ):**
+**Simple search operation (3-5 steps):**
 ```
-https://www.google.com を開いて、検索ボックスに 'Python tutorial' と入力し、検索ボタンをクリックしてください
-```
-
-**フォーム入力操作 (5-10ステップ):**
-```
-現在のページで、お問い合わせフォームの名前欄に '山田太郎'、メールアドレス欄に 'yamada@example.com'、メッセージ欄に 'テストメッセージです' と入力して、送信ボタンをクリックしてください
+Open https://www.google.com, type 'Python tutorial' in the search box, and click the search button
 ```
 
-**複雑な操作 (10-15ステップ):**
+**Form input operation (5-10 steps):**
 ```
-https://www.amazon.co.jp を開いて、検索ボックスに 'Python プログラミング' と入力し、検索を実行してください。その後、最初の検索結果をクリックしてください
+On the current page, fill in the contact form: enter 'Taro Yamada' in the name field, 'yamada@example.com' in the email field, and 'This is a test message' in the message field, then click the submit button
 ```
 
-## ファイル構成
+**Complex operation (10-15 steps):**
+```
+Open https://www.amazon.co.jp, type 'Python programming' in the search box, execute the search, then click the first search result
+```
+
+## File Structure
 
 ```
 browser-bot/
-├── browser_bot.py              # メインの操作実行エンジン
-├── mcp_server.py              # MCP サーバー実装
-├── launch-mcp-server.sh       # MCP サーバー起動スクリプト
-├── launch-chrome.sh           # Chrome 起動スクリプト（デバッグポート付き）
-├── pyproject.toml             # プロジェクト設定と依存関係
-├── uv.lock                    # 依存関係ロックファイル
-├── tests/                     # テストスクリプト
+├── browser_bot.py              # Main operation execution engine
+├── mcp_server.py              # MCP server implementation
+├── launch-mcp-server.sh       # MCP server launch script
+├── launch-chrome.sh           # Chrome launch script (with debug port)
+├── pyproject.toml             # Project configuration and dependencies
+├── uv.lock                    # Dependency lock file
+├── tests/                     # Test scripts
 │   ├── test-mcp-initialize.sh
 │   ├── test-mcp-tools-list.sh
 │   ├── test-run.sh
@@ -151,77 +153,77 @@ browser-bot/
 └── CLAUDE.md
 ```
 
-## 依存関係
+## Dependencies
 
-- **browser-use**: ブラウザ自動操作ライブラリ
-- **fastmcp**: MCP サーバー実装フレームワーク
-- **langchain_openai**: OpenAI LLM 統合
-- **langchain_google_genai**: Google Gemini LLM 統合
-- **playwright**: ブラウザ制御
-- **httpx**: HTTP クライアント
-- **pillow**: 画像処理
-- **python-dotenv**: 環境変数管理
+- **browser-use**: Browser automation library
+- **fastmcp**: MCP server implementation framework
+- **langchain_openai**: OpenAI LLM integration
+- **langchain_google_genai**: Google Gemini LLM integration
+- **playwright**: Browser control
+- **httpx**: HTTP client
+- **pillow**: Image processing
+- **python-dotenv**: Environment variable management
 
-## ログ
+## Logging
 
-すべてのログは以下のファイルに記録されます：
+All logs are recorded in the following file:
 
-- **ログファイル**: `/tmp/browser-bot.log`
+- **Log file**: `/tmp/browser-bot.log`
 
-注意: MCP サーバーでは stdout にログを出力しません（stdio 通信を妨げるため）
+Note: The MCP server does not output logs to stdout (to avoid interfering with stdio communication).
 
-## テスト
+## Testing
 
-### 初期化テスト
+### Initialization Test
 ```bash
 ./tests/test-mcp-initialize.sh
 ```
 
-### ツール一覧テスト
+### Tool List Test
 ```bash
 ./tests/test-mcp-tools-list.sh
 ```
 
-### 直接実行テスト
+### Direct Execution Test
 ```bash
 ./tests/test-run.sh
 ```
 
-### パス経由実行テスト
+### PATH Execution Test
 ```bash
 ./tests/test-run-with-path.sh
 ```
 
-## トラブルシューティング
+## Troubleshooting
 
-### Chrome が起動しない
+### Chrome Won't Start
 
-1. Chrome が既に起動している場合は終了してください
-2. `./launch-chrome.sh` を実行してください
-3. ポート 9222 が使用されていないか確認してください
+1. Quit Chrome if it's already running
+2. Run `./launch-chrome.sh`
+3. Make sure port 9222 is not in use
 
-### MCP サーバーでエラーが出る
+### MCP Server Errors
 
-1. `.env` ファイルに `OPENAI_API_KEY` が設定されているか確認
-2. Chrome がデバッグポート付きで起動しているか確認
-3. ログファイル (`/tmp/browser-bot.log`) を確認
+1. Verify that `OPENAI_API_KEY` is set in the `.env` file
+2. Confirm Chrome is running with the debug port enabled
+3. Check the log file (`/tmp/browser-bot.log`)
 
-### 操作が途中で止まる
+### Operations Stop Midway
 
-- `max_steps` パラメーターを増やしてみてください
-- タスクの内容をより具体的に記述してください
+- Try increasing the `max_steps` parameter
+- Write more specific task descriptions
 
-### スーパーリロードが期待通りに動作しない
+### Super Reload Not Working as Expected
 
-Browser Bot では複数の方法でスーパーリロード（キャッシュ無視のリロード）を実装しています：
+Browser Bot implements super reload (cache-ignoring reload) using multiple methods:
 
-1. **super_reload**: 3段階のフォールバック方式
-   - Chrome DevTools Protocol (CDP) を使用（最も確実）
-   - キーボードショートカット（Ctrl+Shift+R / Cmd+Shift+R）
-   - 通常のリロード（フォールバック）
+1. **super_reload**: 3-stage fallback approach
+   - Chrome DevTools Protocol (CDP) (most reliable)
+   - Keyboard shortcut (Ctrl+Shift+R / Cmd+Shift+R)
+   - Normal reload (fallback)
 
-2. **force_reload_with_javascript**: JavaScript による強制リロード
-   - `location.reload(true)` を使用
-   - キャッシュバスティング用のタイムスタンプ付きリロード
+2. **force_reload_with_javascript**: Forced reload via JavaScript
+   - Uses `location.reload(true)`
+   - Reload with cache-busting timestamp
 
-いずれかの方法で確実にキャッシュをクリアできます。
+Either method ensures the cache is cleared reliably.
