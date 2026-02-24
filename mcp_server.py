@@ -14,13 +14,8 @@ import asyncio
 import base64
 import json
 import os
-import platform
-import socket
-import subprocess
 import sys
 from typing import Annotated
-
-import httpx
 
 from logging_config import logger
 
@@ -36,6 +31,7 @@ from browser_bot import (
     get_full_screenshot,
     get_page_source,
     get_visible_screenshot,
+    launch_chrome,
     request,
     run_lighthouse,
     run_script,
@@ -48,27 +44,6 @@ load_dotenv()
 
 # Chrome 接続先の設定 (デフォルト: http://localhost:9222)
 CHROME_DEBUG_URL = os.getenv("CHROME_DEBUG_URL", "http://localhost:9222")
-CHROME_DEBUG_HOST = (
-    CHROME_DEBUG_URL.replace("http://", "")
-    .replace("https://", "")
-    .split(":")[0]
-)
-CHROME_DEBUG_PORT = int(
-    CHROME_DEBUG_URL.replace("http://", "")
-    .replace("https://", "")
-    .split(":")[1]
-    if ":" in CHROME_DEBUG_URL
-    else "9222"
-)
-
-# リモートブラウザ使用フラグ
-USE_REMOTE_BROWSER = os.getenv("USE_REMOTE_BROWSER", "false").lower() == "true"
-
-# Selenium Grid URL (リモートブラウザ使用時)
-SELENIUM_REMOTE_URL = os.getenv(
-    "SELENIUM_REMOTE_URL", "http://selenium-grid.cyberneura.com:31444"
-)
-
 # MCPサーバーの設定
 server = fastmcp.FastMCP(
     name="browser_bot",
@@ -691,168 +666,29 @@ async def launch_chrome_with_debug(
     ] = True,
 ) -> str:
     """Chrome をデバッグポートで起動する（リモートブラウザ使用時はスキップ）"""
-    mode_text = "ゲストモード" if as_guest else "通常モード"
-
-    if USE_REMOTE_BROWSER:
-        logger.info(
-            f"リモートブラウザ使用中 ({SELENIUM_REMOTE_URL}) - Chrome 起動をスキップ"
-        )
-        return (
-            f"✅ リモートブラウザを使用中です ({SELENIUM_REMOTE_URL})\n\n"
-            "browser_bot ツールを使用できます。"
-        )
-
     logger.info(
-        f"Chrome {mode_text}起動ツール実行開始 (URL: {CHROME_DEBUG_URL})"
+        f"Chrome 起動ツール実行開始 "
+        f"(guest={as_guest}, URL: {CHROME_DEBUG_URL})"
     )
 
-    # ローカルブラウザの場合のみポート確認
-    # ポートが使用中かチェック
-    def is_port_in_use(port: int) -> bool:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(('', port))
-                return False
-            except socket.error:
-                return True
+    result = await launch_chrome(as_guest=as_guest)
 
-    if is_port_in_use(CHROME_DEBUG_PORT):
-        # ポートが使用中の場合、Chrome が起動しているか確認
-        message_to_append = ""
-        try:
+    status = result['status']
+    message = result['message']
+    browser_info = result.get('browser_info')
 
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{CHROME_DEBUG_URL}/json/version", timeout=2
-                )
-                if response.status_code == 200:
-                    version_info = response.json()
-                    browser_info = version_info.get('Browser', 'Unknown')
-                    logger.info(f"Chrome は既に起動しています: {browser_info}")
-                    return (
-                        f"✅ Chrome は既に起動しています ({CHROME_DEBUG_URL})\n\n"
-                        f"ブラウザ情報: {browser_info}\n\n"
-                        "browser_bot ツールを使用できます。"
-                    )
-        except Exception as e:
-            message_to_append = f" (エラー: {e.__class__.__name__}: {e})"
+    if status == 'error':
+        logger.error(f"Chrome 起動エラー: {message}")
+        return f"❌ エラー: {message}"
 
-        logger.warning(
-            f"ポート {CHROME_DEBUG_PORT} は使用中ですが、Chrome ではない"
-            f"可能性があります{message_to_append}"
-        )
-        return (
-            f"⚠️ ポート {CHROME_DEBUG_PORT} は既に使用されていますが、Chrome ではない可能性があります。"
-            f"\n\n既存のプロセスを確認してください。{message_to_append}"
-        )
+    parts = [f"✅ {message}"]
+    if browser_info:
+        parts.append(f"\nブラウザ情報: {browser_info}")
+    parts.append("\nbrowser_bot ツールを使用できます。")
 
-    # Chrome の実行パスを取得
-    system = platform.system()
-    chrome_paths = []
-
-    if system == "Darwin":  # macOS
-        chrome_paths = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            (
-                "/Applications/Google Chrome Canary.app/Contents/MacOS/"
-                "Google Chrome Canary"
-            ),
-            "/Applications/Chromium.app/Contents/MacOS/Chromium",
-        ]
-    elif system == "Linux":
-        chrome_paths = [
-            "/usr/bin/google-chrome",
-            "/usr/bin/google-chrome-stable",
-            "/usr/bin/chromium",
-            "/usr/bin/chromium-browser",
-            "/snap/bin/chromium",
-        ]
-    elif system == "Windows":
-        chrome_paths = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe",
-            r"C:\Program Files\Google\Chrome Dev\Application\chrome.exe",
-        ]
-
-    # 実行可能な Chrome パスを探す
-    chrome_executable = None
-    for path in chrome_paths:
-        if os.path.exists(path):
-            chrome_executable = path
-            break
-
-    if not chrome_executable:
-        error_msg = (
-            f"❌ エラー: Chrome が見つかりません。Chrome をインストールしてください。\n\n検索したパス:\n"
-            + "\n".join(chrome_paths)
-        )
-        logger.error(error_msg)
-        return error_msg
-
-    # Chrome 起動オプション
-    chrome_args = [
-        chrome_executable,
-        f"--remote-debugging-port={CHROME_DEBUG_PORT}",
-        "--no-first-run",
-        "--disable-default-apps",
-    ]
-
-    if as_guest:
-        # ゲストモードでも --user-data-dir が必要
-        # (既存 Chrome が起動中だと別インスタンスにならないため)
-        user_data_dir = os.path.expanduser(
-            "~/.google-chrome-debug-guest"
-        )
-        chrome_args.extend([
-            f"--user-data-dir={user_data_dir}",
-            "--guest",
-        ])
-    else:
-        user_data_dir = os.path.expanduser("~/.google-chrome-debug")
-        chrome_args.append(f"--user-data-dir={user_data_dir}")
-
-    try:
-        # Chrome を起動
-        logger.info(
-            f"Chrome を{mode_text}で起動しています: {chrome_executable}"
-        )
-        subprocess.Popen(
-            chrome_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-
-        await asyncio.sleep(2)
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "http://localhost:9222/json/version", timeout=5
-                )
-                if response.status_code == 200:
-                    version_info = response.json()
-                    browser_info = version_info.get('Browser', 'Unknown')
-                    success_msg = (
-                        f"✅ Chrome を{mode_text}で正常に起動しました (ポート 9222)\n\n"
-                        f"ブラウザ情報: {browser_info}\n\n"
-                        "browser_bot ツールを使用できます。"
-                    )
-                    logger.info(success_msg)
-                    return success_msg
-        except Exception as e:
-            logger.warning(
-                f"Chrome の起動確認でエラー: {e.__class__.__name__}: {e}"
-            )
-
-        # 起動したけど確認できない場合
-        return (
-            f"✅ Chrome を{mode_text}で起動しました (ポート 9222)\n\n"
-            "起動確認はできませんでしたが、少し待ってから browser_bot ツールを試してください。"
-        )
-
-    except Exception as e:
-        error_msg = f"❌ エラー: Chrome の起動に失敗しました: {e.__class__.__name__}: {e}"
-        logger.error(error_msg, exc_info=True)
-        return error_msg
+    response = "\n".join(parts)
+    logger.info(response)
+    return response
 
 
 @server.tool(

@@ -63,6 +63,15 @@ class BrowserRuntimeError(BrowserBotError):
     pass
 
 
+async def _navigate_to(page, url):
+    """
+    page.goto() の代わりに window.location.href で遷移する。
+    page.goto() は CDP 経由で Chrome をクラッシュさせることがあるため。
+    """
+    await page.evaluate(f"() => {{ window.location.href = {json.dumps(url)}; }}")
+    await asyncio.sleep(0.5)
+
+
 async def _page_wait_for_load_state(
     page, state='domcontentloaded', timeout=7000
 ):
@@ -268,7 +277,7 @@ async def run_task(
             # 現在のページを取得（すでに browser_session.start() 済み）
             page = await browser_session.get_current_page()
             # URL に遷移
-            await page.goto(url)
+            await _navigate_to(page, url)
             load_state = await _page_wait_for_load_state(page)
             if load_state == 'skipped':
                 logger.info(f"✅ {url} への遷移を続行")
@@ -396,7 +405,7 @@ async def _get_active_page(
         # URL が指定されていれば遷移
         if url:
             logger.info(f"URL に遷移: {url}")
-            await active_page.goto(url)
+            await _navigate_to(active_page, url)
             # ページのロード状態を待機
             await _page_wait_for_load_state(active_page)
 
@@ -887,7 +896,7 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
             # URL が指定されていて、現在のURLと異なる場合は移動
             if url and page.url != url:
                 logger.info(f"指定 URL に移動: {url}")
-                await page.goto(url)
+                await _navigate_to(page, url)
                 await _page_wait_for_load_state(page)
 
             # Playwright の reload メソッドでキャッシュを無視してリロード
@@ -1145,6 +1154,189 @@ async def user_script():
         finally:
             await browser.close()
             logger.info("ブラウザ接続を閉じました")
+
+
+async def launch_chrome(*, as_guest: bool = True) -> dict:
+    """
+    Chrome をデバッグポート付きで起動する。
+    既に起動済みならその旨を返す。
+
+    Args:
+        as_guest: True=ゲストモード, False=通常モード
+
+    Returns:
+        dict: {
+            'status': 'already_running' | 'launched' | 'error',
+            'message': str,
+            'browser_info': str | None,
+        }
+    """
+    import platform
+    import socket
+
+    chrome_debug_port = int(
+        CHROME_DEBUG_URL.replace("http://", "")
+        .replace("https://", "")
+        .split(":")[1]
+        if ":" in CHROME_DEBUG_URL.replace("http://", "")
+        else "9222"
+    )
+
+    if BROWSER_BOT_USE_REMOTE:
+        return {
+            'status': 'already_running',
+            'message': (
+                f"リモートブラウザを使用中です ({SELENIUM_REMOTE_URL})"
+            ),
+            'browser_info': None,
+        }
+
+    # ポートが使用中かチェック
+    def is_port_in_use(port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('', port))
+                return False
+            except socket.error:
+                return True
+
+    if is_port_in_use(chrome_debug_port):
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{CHROME_DEBUG_URL}/json/version", timeout=2
+                )
+                if response.status_code == 200:
+                    version_info = response.json()
+                    browser_info = version_info.get('Browser', 'Unknown')
+                    return {
+                        'status': 'already_running',
+                        'message': (
+                            f"Chrome は既に起動しています "
+                            f"({CHROME_DEBUG_URL})"
+                        ),
+                        'browser_info': browser_info,
+                    }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': (
+                    f"ポート {chrome_debug_port} は使用中ですが、"
+                    f"Chrome ではない可能性があります "
+                    f"({e.__class__.__name__}: {e})"
+                ),
+                'browser_info': None,
+            }
+
+    # Chrome の実行パスを取得
+    system = platform.system()
+    chrome_paths = []
+
+    if system == "Darwin":
+        chrome_paths = [
+            "/Applications/Google Chrome.app/Contents/MacOS/"
+            "Google Chrome",
+            "/Applications/Google Chrome Canary.app/Contents/MacOS/"
+            "Google Chrome Canary",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+    elif system == "Linux":
+        chrome_paths = [
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/snap/bin/chromium",
+        ]
+    elif system == "Windows":
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application"
+            r"\chrome.exe",
+        ]
+
+    chrome_executable = None
+    for path in chrome_paths:
+        if os.path.exists(path):
+            chrome_executable = path
+            break
+
+    if not chrome_executable:
+        return {
+            'status': 'error',
+            'message': "Chrome が見つかりません",
+            'browser_info': None,
+        }
+
+    mode_text = "ゲストモード" if as_guest else "通常モード"
+
+    chrome_args = [
+        chrome_executable,
+        f"--remote-debugging-port={chrome_debug_port}",
+        "--no-first-run",
+        "--disable-default-apps",
+    ]
+
+    if as_guest:
+        user_data_dir = os.path.expanduser(
+            "~/.google-chrome-debug-guest"
+        )
+        chrome_args.extend([
+            f"--user-data-dir={user_data_dir}",
+            "--guest",
+        ])
+    else:
+        user_data_dir = os.path.expanduser("~/.google-chrome-debug")
+        chrome_args.append(f"--user-data-dir={user_data_dir}")
+
+    try:
+        subprocess.Popen(
+            chrome_args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        await asyncio.sleep(2)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{CHROME_DEBUG_URL}/json/version", timeout=5
+                )
+                if response.status_code == 200:
+                    version_info = response.json()
+                    browser_info = version_info.get(
+                        'Browser', 'Unknown'
+                    )
+                    return {
+                        'status': 'launched',
+                        'message': (
+                            f"Chrome を{mode_text}で起動しました "
+                            f"(ポート {chrome_debug_port})"
+                        ),
+                        'browser_info': browser_info,
+                    }
+        except Exception:
+            pass
+
+        return {
+            'status': 'launched',
+            'message': (
+                f"Chrome を{mode_text}で起動しました "
+                f"(ポート {chrome_debug_port})。"
+                "起動確認はできませんでした。"
+            ),
+            'browser_info': None,
+        }
+
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': (
+                f"Chrome の起動に失敗しました: "
+                f"{e.__class__.__name__}: {e}"
+            ),
+            'browser_info': None,
+        }
 
 
 epilog = '''
