@@ -349,7 +349,6 @@ async def _get_active_page(
                 "❌ エラー: Chrome にアクティブなコンテキストがありません"
             )
             logger.error(error_msg)
-            await browser.close()
             raise BrowserRuntimeError(error_msg)
 
         # 全コンテキストからページを収集
@@ -397,7 +396,6 @@ async def _get_active_page(
                     "❌ エラー: Chrome にアクティブなページがありません"
                 )
                 logger.error(error_msg)
-                await browser.close()
                 raise BrowserRuntimeError(error_msg)
 
         logger.info(f"アクティブページを特定: {active_page.url}")
@@ -415,7 +413,6 @@ async def _get_active_page(
         return active_page, browser
 
     except Exception as e:
-        await browser.close()
         error_msg = f"❌ エラー: アクティブページの取得中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
         raise BrowserRuntimeError(error_msg)
@@ -613,41 +610,38 @@ async def get_page_source(*, url: str | None = None):
     """
     logger.info("ソースコード取得開始")
 
-    async with async_playwright() as p:
-        page, browser = await _get_active_page(p, url=url)
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(p, url=url)
 
-        try:
-            # 現在の状態を取得
-            current_url = page.url
+    # 現在の状態を取得
+    current_url = page.url
 
-            # ページが完全に読み込まれるまで待機
-            await _page_wait_for_load_state(page)
+    # ページが完全に読み込まれるまで待機
+    await _page_wait_for_load_state(page)
 
-            # タイトルとソースコードを取得
-            try:
-                title = await page.title()
-            except Exception:
-                title = "Unknown"
-                logger.warning("タイトル取得に失敗しました")
+    # タイトルとソースコードを取得
+    try:
+        title = await page.title()
+    except Exception:
+        title = "Unknown"
+        logger.warning("タイトル取得に失敗しました")
 
-            source = await page.content()
+    source = await page.content()
 
-            # ファイルに保存
-            downloads_dir = os.path.expanduser("~/Downloads")
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            filename = f"browser-bot-source-{timestamp}.html"
-            file_path = os.path.join(downloads_dir, filename)
+    # ファイルに保存
+    downloads_dir = os.path.expanduser("~/Downloads")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"browser-bot-source-{timestamp}.html"
+    file_path = os.path.join(downloads_dir, filename)
 
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(source)
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(source)
 
-            logger.info(
-                f"ソースコード取得完了: {current_url}, ファイル保存: {file_path}"
-            )
+    logger.info(
+        f"ソースコード取得完了: {current_url}, ファイル保存: {file_path}"
+    )
 
-            return {'file_path': file_path, 'url': current_url, 'title': title}
-        finally:
-            await browser.close()
+    return {'file_path': file_path, 'url': current_url, 'title': title}
 
 
 async def get_visible_screenshot(
@@ -679,76 +673,73 @@ async def get_visible_screenshot(
         f"(スクロール倍率: {page_y_offset_as_viewport_height})"
     )
 
-    async with async_playwright() as p:
-        page, browser = await _get_active_page(p, url=url)
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(p, url=url)
 
-        try:
-            # 現在の状態を取得
-            current_url = page.url
+    # 現在の状態を取得
+    current_url = page.url
 
-            # ページが完全に読み込まれるまで待機
-            await _page_wait_for_load_state(page)
+    # ページが完全に読み込まれるまで待機
+    await _page_wait_for_load_state(page)
 
-            # タイトルを取得
-            try:
-                title = await page.title()
-            except Exception:
-                title = "Unknown"
-                logger.warning("タイトル取得に失敗しました")
+    # タイトルを取得
+    try:
+        title = await page.title()
+    except Exception:
+        title = "Unknown"
+        logger.warning("タイトル取得に失敗しました")
 
-            # スクロール処理
-            if page_y_offset_as_viewport_height > 0:
-                # ビューポートの高さを取得
-                viewport_height = await page.evaluate(
-                    "() => window.innerHeight"
-                )
-                # スクロール量を計算
-                scroll_y = int(
-                    viewport_height * page_y_offset_as_viewport_height
-                )
-                # スクロール実行
-                await page.evaluate(f"() => window.scrollBy(0, {scroll_y})")
-                # スクロール後の描画を待つ
-                await page.wait_for_timeout(500)
-                logger.info(
-                    f"ページをスクロールしました: {scroll_y}px "
-                    f"(ビューポート高さ {viewport_height}px の "
-                    f"{page_y_offset_as_viewport_height} 倍)"
-                )
+    # スクロール処理
+    if page_y_offset_as_viewport_height > 0:
+        # ビューポートの高さを取得
+        viewport_height = await page.evaluate(
+            "() => window.innerHeight"
+        )
+        # スクロール量を計算
+        scroll_y = int(
+            viewport_height * page_y_offset_as_viewport_height
+        )
+        # スクロール実行
+        await page.evaluate(f"() => window.scrollBy(0, {scroll_y})")
+        # スクロール後の描画を待つ
+        await page.wait_for_timeout(500)
+        logger.info(
+            f"ページをスクロールしました: {scroll_y}px "
+            f"(ビューポート高さ {viewport_height}px の "
+            f"{page_y_offset_as_viewport_height} 倍)"
+        )
 
-            # 表示箇所のスクリーンショット取得
-            screenshot_bytes = await page.screenshot()
+    # 表示箇所のスクリーンショット取得
+    screenshot_bytes = await page.screenshot()
 
-            # サイズ調整
-            # やっぱりリサイズしない
-            # screenshot_bytes = _resize_image_if_needed(screenshot_bytes)
+    # サイズ調整
+    # やっぱりリサイズしない
+    # screenshot_bytes = _resize_image_if_needed(screenshot_bytes)
 
-            # ファイルに保存
-            downloads_dir = os.path.expanduser("~/Downloads")
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            filename = f"browser-bot-screenshot-{timestamp}.png"
-            file_path = os.path.join(downloads_dir, filename)
+    # ファイルに保存
+    downloads_dir = os.path.expanduser("~/Downloads")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"browser-bot-screenshot-{timestamp}.png"
+    file_path = os.path.join(downloads_dir, filename)
 
-            with open(file_path, "wb") as f:
-                f.write(screenshot_bytes)
+    with open(file_path, "wb") as f:
+        f.write(screenshot_bytes)
 
-            logger.info(
-                f"表示箇所のスクリーンショット取得完了: {current_url}, "
-                f"ファイル保存: {file_path}"
-            )
+    logger.info(
+        f"表示箇所のスクリーンショット取得完了: {current_url}, "
+        f"ファイル保存: {file_path}"
+    )
 
-            result = {
-                'file_path': file_path,
-                'url': current_url,
-                'title': title,
-            }
+    result = {
+        'file_path': file_path,
+        'url': current_url,
+        'title': title,
+    }
 
-            if include_image_binary:
-                result['screenshot'] = screenshot_bytes
+    if include_image_binary:
+        result['screenshot'] = screenshot_bytes
 
-            return result
-        finally:
-            await browser.close()
+    return result
 
 
 async def get_full_screenshot(
@@ -772,58 +763,55 @@ async def get_full_screenshot(
     """
     logger.info("全領域のスクリーンショット取得開始")
 
-    async with async_playwright() as p:
-        page, browser = await _get_active_page(p, url=url)
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(p, url=url)
 
-        try:
-            # 現在の状態を取得
-            current_url = page.url
+    # 現在の状態を取得
+    current_url = page.url
 
-            # ページが完全に読み込まれるまで待機
-            await _page_wait_for_load_state(page)
+    # ページが完全に読み込まれるまで待機
+    await _page_wait_for_load_state(page)
 
-            # タイトルを取得
-            try:
-                title = await page.title()
-            except Exception:
-                title = "Unknown"
-                logger.warning("タイトル取得に失敗しました")
+    # タイトルを取得
+    try:
+        title = await page.title()
+    except Exception:
+        title = "Unknown"
+        logger.warning("タイトル取得に失敗しました")
 
-            # 全領域のスクリーンショット取得
-            screenshot_bytes = await page.screenshot(full_page=True)
+    # 全領域のスクリーンショット取得
+    screenshot_bytes = await page.screenshot(full_page=True)
 
-            # サイズ調整（全領域は特に大きくなりがちなので、より小さい制限を設定）
-            # やっぱりリサイズしない
-            # screenshot_bytes = _resize_image_if_needed(
-            #     screenshot_bytes, max_size_bytes=800000
-            # )
+    # サイズ調整（全領域は特に大きくなりがちなので、より小さい制限を設定）
+    # やっぱりリサイズしない
+    # screenshot_bytes = _resize_image_if_needed(
+    #     screenshot_bytes, max_size_bytes=800000
+    # )
 
-            # ファイルに保存
-            downloads_dir = os.path.expanduser("~/Downloads")
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            filename = f"browser-bot-screenshot-{timestamp}.png"
-            file_path = os.path.join(downloads_dir, filename)
+    # ファイルに保存
+    downloads_dir = os.path.expanduser("~/Downloads")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"browser-bot-screenshot-{timestamp}.png"
+    file_path = os.path.join(downloads_dir, filename)
 
-            with open(file_path, "wb") as f:
-                f.write(screenshot_bytes)
+    with open(file_path, "wb") as f:
+        f.write(screenshot_bytes)
 
-            logger.info(
-                f"全領域のスクリーンショット取得完了: {current_url}, "
-                f"ファイル保存: {file_path}"
-            )
+    logger.info(
+        f"全領域のスクリーンショット取得完了: {current_url}, "
+        f"ファイル保存: {file_path}"
+    )
 
-            result = {
-                'file_path': file_path,
-                'url': current_url,
-                'title': title,
-            }
+    result = {
+        'file_path': file_path,
+        'url': current_url,
+        'title': title,
+    }
 
-            if include_image_binary:
-                result['screenshot'] = screenshot_bytes
+    if include_image_binary:
+        result['screenshot'] = screenshot_bytes
 
-            return result
-        finally:
-            await browser.close()
+    return result
 
 
 async def get_current_url():
@@ -838,32 +826,30 @@ async def get_current_url():
     """
     logger.info("現在の URL 取得開始")
 
-    async with async_playwright() as p:
-        page, browser = await _get_active_page(
-            p, url=None, create_new_page=False
-        )
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(
+        p, url=None, create_new_page=False
+    )
 
+    try:
+        # 現在の状態を取得
+        current_url = page.url
+
+        # タイトルを取得
         try:
-            # 現在の状態を取得
-            current_url = page.url
+            title = await page.title()
+        except Exception:
+            title = "Unknown"
+            logger.warning("タイトル取得に失敗しました")
 
-            # タイトルを取得
-            try:
-                title = await page.title()
-            except Exception:
-                title = "Unknown"
-                logger.warning("タイトル取得に失敗しました")
+        logger.info(f"現在の URL 取得完了: {current_url}")
 
-            logger.info(f"現在の URL 取得完了: {current_url}")
+        return {'url': current_url, 'title': title}
 
-            return {'url': current_url, 'title': title}
-
-        except Exception as e:
-            error_msg = f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
-            logger.error(error_msg, exc_info=True)
-            raise BrowserBotTaskFailedError(error_msg)
-        finally:
-            await browser.close()
+    except Exception as e:
+        error_msg = f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        raise BrowserBotTaskFailedError(error_msg)
 
 
 async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
@@ -886,57 +872,54 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
     # Chrome が起動しているか確認
     await _check_chrome_running()
 
-    async with async_playwright() as p:
-        page, browser = await _get_active_page(p, url=url)
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(p, url=url)
 
-        try:
-            # 現在の URL を保存
-            current_url = page.url if not url else url
+    try:
+        # 現在の URL を保存
+        current_url = page.url if not url else url
 
-            # URL が指定されていて、現在のURLと異なる場合は移動
-            if url and page.url != url:
-                logger.info(f"指定 URL に移動: {url}")
-                await _navigate_to(page, url)
-                await _page_wait_for_load_state(page)
-
-            # Playwright の reload メソッドでキャッシュを無視してリロード
-            logger.info(f"スーパーリロード実行中: {current_url}, {mode=}")
-
-            if mode == 'javascript':
-                # JavaScript を使ってスーパーリロード
-                await _super_reload_with_javascript(page)
-            elif mode == 'keyboard':
-                # キーボードショートカットを使ってスーパーリロード
-                await _super_reload_with_keyboard(page)
-            else:
-                # CDP (Chrome DevTools Protocol) を使ってスーパーリロード
-                await _super_reload_with_cdp(page)
-
-            # リロード完了を待つ
+        # URL が指定されていて、現在のURLと異なる場合は移動
+        if url and page.url != url:
+            logger.info(f"指定 URL に移動: {url}")
+            await _navigate_to(page, url)
             await _page_wait_for_load_state(page)
 
-            # タイトルを取得
-            try:
-                title = await page.title()
-            except Exception:
-                title = "Unknown"
-                logger.warning("タイトル取得に失敗しました")
+        # Playwright の reload メソッドでキャッシュを無視してリロード
+        logger.info(f"スーパーリロード実行中: {current_url}, {mode=}")
 
-            final_url = page.url
-            logger.info(f"スーパーリロード完了: {final_url}")
+        if mode == 'javascript':
+            # JavaScript を使ってスーパーリロード
+            await _super_reload_with_javascript(page)
+        elif mode == 'keyboard':
+            # キーボードショートカットを使ってスーパーリロード
+            await _super_reload_with_keyboard(page)
+        else:
+            # CDP (Chrome DevTools Protocol) を使ってスーパーリロード
+            await _super_reload_with_cdp(page)
 
-            return {'url': final_url, 'title': title}
+        # リロード完了を待つ
+        await _page_wait_for_load_state(page)
 
-        except Exception as e:
-            error_msg = (
-                f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: "
-                f"{e.__class__.__name__}: {e}"
-            )
-            logger.error(error_msg, exc_info=True)
-            raise BrowserBotTaskFailedError(error_msg)
+        # タイトルを取得
+        try:
+            title = await page.title()
+        except Exception:
+            title = "Unknown"
+            logger.warning("タイトル取得に失敗しました")
 
-        finally:
-            await browser.close()
+        final_url = page.url
+        logger.info(f"スーパーリロード完了: {final_url}")
+
+        return {'url': final_url, 'title': title}
+
+    except Exception as e:
+        error_msg = (
+            f"❌ エラー: スーパーリロード中に予期しないエラーが発生しました: "
+            f"{e.__class__.__name__}: {e}"
+        )
+        logger.error(error_msg, exc_info=True)
+        raise BrowserBotTaskFailedError(error_msg)
 
 
 async def _super_reload_with_cdp(page):
@@ -1058,37 +1041,33 @@ async def run_script(*, script: str, url: str | None = None):
     if chrome_check_error:
         return None
 
-    async with async_playwright() as p:
-        page, browser = await _get_active_page(p, url=url)
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(p, url=url)
 
-        try:
-            # ページが完全に読み込まれるまで待機
-            await _page_wait_for_load_state(page)
+    try:
+        # ページが完全に読み込まれるまで待機
+        await _page_wait_for_load_state(page)
 
-            # JavaScript を実行
-            # スクリプトを async function で囲って実行
-            wrapped_script = f"(async () => {{\n{script}\n}})();"
-            result = await page.evaluate(wrapped_script)
-            logger.info(f"✅ JavaScript スクリプト実行完了: result={result}")
+        # JavaScript を実行
+        # スクリプトを async function で囲って実行
+        wrapped_script = f"(async () => {{\n{script}\n}})();"
+        result = await page.evaluate(wrapped_script)
+        logger.info(f"✅ JavaScript スクリプト実行完了: result={result}")
 
-            # 実行結果をログに記録（結果が大きい場合は切り詰める）
-            if result is not None:
-                result_str = str(result)
-                if len(result_str) > 500:
-                    logger.debug(f"実行結果: {result_str[:500]}...")
-                else:
-                    logger.debug(f"実行結果: {result_str}")
+        # 実行結果をログに記録（結果が大きい場合は切り詰める）
+        if result is not None:
+            result_str = str(result)
+            if len(result_str) > 500:
+                logger.debug(f"実行結果: {result_str[:500]}...")
+            else:
+                logger.debug(f"実行結果: {result_str}")
 
-            return result
+        return result
 
-        except Exception as e:
-            error_msg = f"❌ スクリプト実行中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
-            logger.error(error_msg, exc_info=True)
-            raise BrowserBotTaskFailedError(error_msg)
-
-        finally:
-            await browser.close()
-            logger.info("ブラウザ接続を閉じました")
+    except Exception as e:
+        error_msg = f"❌ スクリプト実行中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        raise BrowserBotTaskFailedError(error_msg)
 
 
 async def run_python_script(
@@ -1120,40 +1099,36 @@ async def run_python_script(
 
     await _check_chrome_running()
 
-    async with async_playwright() as p:
-        page, browser = await _get_active_page(p, url=url)
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(p, url=url)
 
-        # ページが完全に読み込まれるまで待機
-        await _page_wait_for_load_state(page)
+    # ページが完全に読み込まれるまで待機
+    await _page_wait_for_load_state(page)
 
-        # page オブジェクトを利用可能にして Python スクリプトを実行
-        local_vars = {'page': page, 'asyncio': asyncio}
-        global_vars = {'page': page, 'asyncio': asyncio}
-        try:
-            # async 関数として実行するためにラップ
-            wrapped_script = f"""
+    # page オブジェクトを利用可能にして Python スクリプトを実行
+    local_vars = {'page': page, 'asyncio': asyncio}
+    global_vars = {'page': page, 'asyncio': asyncio}
+    try:
+        # async 関数として実行するためにラップ
+        wrapped_script = f"""
 async def user_script():
 {chr(10).join('    ' + line for line in python_script_text.strip().split(chr(10)))}
 """
-            logger.debug('wrapped_script: %s', wrapped_script)
-            # 関数を定義
-            compiled_code = compile(wrapped_script, '<string>', 'exec')
-            exec(compiled_code, global_vars, local_vars)
-            # 定義した関数を実行
-            result = await local_vars['user_script']()
-            logger.info(
-                f"カスタム Python スクリプトの実行が完了しました: {result=}"
-            )
-            return result
+        logger.debug('wrapped_script: %s', wrapped_script)
+        # 関数を定義
+        compiled_code = compile(wrapped_script, '<string>', 'exec')
+        exec(compiled_code, global_vars, local_vars)
+        # 定義した関数を実行
+        result = await local_vars['user_script']()
+        logger.info(
+            f"カスタム Python スクリプトの実行が完了しました: {result=}"
+        )
+        return result
 
-        except Exception as e:
-            error_msg = f"❌ スクリプト実行中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
-            logger.error(error_msg, exc_info=True)
-            raise BrowserBotTaskFailedError(error_msg)
-
-        finally:
-            await browser.close()
-            logger.info("ブラウザ接続を閉じました")
+    except Exception as e:
+        error_msg = f"❌ スクリプト実行中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
+        logger.error(error_msg, exc_info=True)
+        raise BrowserBotTaskFailedError(error_msg)
 
 
 async def launch_chrome(*, as_guest: bool = True) -> dict:
@@ -1489,27 +1464,27 @@ async def request(
         logger.error(error_msg)
         raise BrowserBotTaskAbortedError(error_msg)
 
-    async with async_playwright() as p:
-        page, _browser = await _get_active_page(p, url=preload_url)
+    p = await async_playwright().start()
+    page, _browser = await _get_active_page(p, url=preload_url)
 
-        request_metod = getattr(page.request, method)
+    request_metod = getattr(page.request, method)
 
-        response: APIResponse = await request_metod(
-            url,
-            **kwargs,
-        )
+    response: APIResponse = await request_metod(
+        url,
+        **kwargs,
+    )
 
-        # レスポンスの内容を取得（コンテキストが閉じられる前に）
-        response_body = await response.body()
-        response_headers = dict(response.headers)
-        response_status = response.status
+    # レスポンスの内容を取得
+    response_body = await response.body()
+    response_headers = dict(response.headers)
+    response_status = response.status
 
-        # レスポンスデータを辞書として返す
-        return {
-            'status': response_status,
-            'headers': response_headers,
-            'body': response_body,
-        }
+    # レスポンスデータを辞書として返す
+    return {
+        'status': response_status,
+        'headers': response_headers,
+        'body': response_body,
+    }
 
 
 async def run_lighthouse(
@@ -1554,12 +1529,11 @@ async def run_lighthouse(
     # URL が指定されていない場合は現在のページの URL を取得
     if not url:
         await _check_chrome_running()
-        async with async_playwright() as p:
-            page, browser = await _get_active_page(
-                p, url=None, create_new_page=False
-            )
-            url = page.url
-            await browser.close()
+        p = await async_playwright().start()
+        page, browser = await _get_active_page(
+            p, url=None, create_new_page=False
+        )
+        url = page.url
         logger.info(f"現在のページの URL を使用: {url}")
 
     # カテゴリのデフォルト値
