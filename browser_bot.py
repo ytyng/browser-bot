@@ -814,6 +814,84 @@ async def get_full_screenshot(
     return result
 
 
+async def login_and_screenshot(
+    *,
+    url: str,
+    username: str,
+    password: str,
+    username_selector: str = 'input[name="j_username"]',
+    password_selector: str = 'input[name="j_password"]',
+    submit_selector: str = 'button[type="submit"]',
+    post_login_wait: float = 3.0,
+) -> dict:
+    """
+    ログインページで認証を行い、ログイン後のページの
+    フルスクリーンショットを取得する
+
+    Args:
+        url: ログインページの URL
+        username: ユーザー名
+        password: パスワード
+        username_selector: ユーザー名入力欄の CSS セレクタ
+        password_selector: パスワード入力欄の CSS セレクタ
+        submit_selector: 送信ボタンの CSS セレクタ
+        post_login_wait: ログイン後の待機秒数
+
+    Returns:
+        dict: {
+            'file_path': str,
+            'url': str,
+            'title': str,
+        }
+    """
+    logger.info(f"ログイン＆スクリーンショット開始: {url}")
+
+    p = await async_playwright().start()
+    page, browser = await _get_active_page(p, url=url)
+
+    # ログインフォームの表示を待機
+    await page.wait_for_selector(username_selector, timeout=10000)
+
+    # 認証情報を入力
+    await page.fill(username_selector, username)
+    await page.fill(password_selector, password)
+    await page.click(submit_selector)
+
+    # ログイン後のリダイレクト完了を待機
+    await asyncio.sleep(post_login_wait)
+    await _page_wait_for_load_state(page)
+
+    current_url = page.url
+    try:
+        title = await page.title()
+    except Exception:
+        title = "Unknown"
+        logger.warning("タイトル取得に失敗しました")
+
+    # フルスクリーンショット取得
+    screenshot_bytes = await page.screenshot(full_page=True)
+
+    # ファイルに保存
+    downloads_dir = os.path.expanduser("~/Downloads")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"browser-bot-screenshot-{timestamp}.png"
+    file_path = os.path.join(downloads_dir, filename)
+
+    with open(file_path, "wb") as f:
+        f.write(screenshot_bytes)
+
+    logger.info(
+        f"ログイン＆スクリーンショット完了: {current_url}, "
+        f"ファイル保存: {file_path}"
+    )
+
+    return {
+        'file_path': file_path,
+        'url': current_url,
+        'title': title,
+    }
+
+
 async def get_current_url():
     """
     現在アクティブなタブの URL を取得する

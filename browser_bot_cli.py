@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import base64
 import json
+import os
 import sys
 
 from browser_bot import (
@@ -17,6 +18,7 @@ from browser_bot import (
     get_page_source,
     get_visible_screenshot,
     launch_chrome,
+    login_and_screenshot,
     request,
     run_lighthouse,
     run_python_script,
@@ -158,6 +160,37 @@ def cmd_http_request(args):
     })
 
 
+def cmd_login_screenshot(args):
+    from dotenv import load_dotenv
+
+    if args.env_file:
+        load_dotenv(args.env_file)
+
+    username = os.environ.get(args.username_env)
+    password = os.environ.get(args.password_env)
+
+    if not username or not password:
+        print(
+            f"Error: 環境変数 {args.username_env} と "
+            f"{args.password_env} を設定してください",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    result = asyncio.run(
+        login_and_screenshot(
+            url=args.url,
+            username=username,
+            password=password,
+            username_selector=args.username_selector,
+            password_selector=args.password_selector,
+            submit_selector=args.submit_selector,
+            post_login_wait=args.post_login_wait,
+        )
+    )
+    _print_json(result)
+
+
 def cmd_lighthouse(args):
     categories = None
     if args.categories:
@@ -287,6 +320,42 @@ def build_parser():
         help='HTTP ヘッダー (JSON 文字列)',
     )
     p.set_defaults(func=cmd_http_request)
+
+    # login-screenshot
+    p = sub.add_parser(
+        'login-screenshot',
+        help='ログインしてフルスクリーンショットを取得',
+    )
+    p.add_argument('--url', type=str, required=True)
+    p.add_argument(
+        '--username-selector', type=str,
+        default='input[name="j_username"]',
+    )
+    p.add_argument(
+        '--password-selector', type=str,
+        default='input[name="j_password"]',
+    )
+    p.add_argument(
+        '--submit-selector', type=str,
+        default='button[type="submit"]',
+    )
+    p.add_argument(
+        '--username-env', type=str, default='JENKINS_USERNAME',
+        help='ユーザー名の環境変数名',
+    )
+    p.add_argument(
+        '--password-env', type=str, default='JENKINS_PASSWORD',
+        help='パスワードの環境変数名',
+    )
+    p.add_argument(
+        '--env-file', type=str, default=None,
+        help='追加の .env ファイルパス',
+    )
+    p.add_argument(
+        '--post-login-wait', type=float, default=3.0,
+        help='ログイン後の待機秒数',
+    )
+    p.set_defaults(func=cmd_login_screenshot)
 
     # lighthouse
     p = sub.add_parser(
