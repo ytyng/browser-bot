@@ -682,7 +682,7 @@ def _format_ax_node(node, ref_map, counter, indent=0):
         parts.append(f'[{role}]')
     if name:
         parts.append(name)
-    if value:
+    if value is not None and value != '':
         parts.append(f'value="{value}"')
 
     # checked / pressed 状態
