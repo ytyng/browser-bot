@@ -68,7 +68,9 @@ async def _navigate_to(page, url):
     page.goto() の代わりに window.location.href で遷移する。
     page.goto() は CDP 経由で Chrome をクラッシュさせることがあるため。
     """
-    await page.evaluate(f"() => {{ window.location.href = {json.dumps(url)}; }}")
+    await page.evaluate(
+        f"() => {{ window.location.href = {json.dumps(url)}; }}"
+    )
     await asyncio.sleep(0.5)
 
 
@@ -594,6 +596,179 @@ def _resize_image_if_needed(
     return output.getvalue()
 
 
+# _format_ax_node で使用する定数
+_AX_SKIP_ROLES = frozenset(
+    {
+        'none',
+        'generic',
+        'linebreak',
+        'inlinetextbox',
+    }
+)
+_AX_TEXT_ROLES = frozenset({'statictext', 'text'})
+_AX_INTERACTIVE_ROLES = frozenset(
+    {
+        'button',
+        'link',
+        'textbox',
+        'checkbox',
+        'radio',
+        'combobox',
+        'listbox',
+        'menuitem',
+        'menuitemcheckbox',
+        'menuitemradio',
+        'option',
+        'searchbox',
+        'slider',
+        'spinbutton',
+        'switch',
+        'tab',
+        'treeitem',
+        'scrollbar',
+    }
+)
+
+
+def _format_ax_node(node, ref_map, counter, indent=0):
+    """
+    AX tree ノードを再帰的にテキスト形式に変換し、ref ID を付与する
+
+    Args:
+        node: accessibility.snapshot() が返すノード辞書
+        ref_map: ref ID → ノード情報のマッピング辞書（破壊的に更新）
+        counter: ref ID のカウンター（リスト[int] で参照渡し）
+        indent: 現在のインデント深さ
+
+    Returns:
+        list[str]: フォーマット済みの行リスト
+    """
+    lines = []
+    role = node.get('role', '')
+    name = node.get('name', '')
+    value = node.get('value', '')
+    role_lower = role.lower()
+
+    # 不要なノードをスキップ
+    if role_lower in _AX_SKIP_ROLES and not name:
+        # 子ノードだけ処理
+        for child in node.get('children', []):
+            lines.extend(_format_ax_node(child, ref_map, counter, indent))
+        return lines
+
+    # テキストノードは名前があればインラインで表示
+    if role_lower in _AX_TEXT_ROLES:
+        if name.strip():
+            prefix = '  ' * indent
+            lines.append(f'{prefix}"{name}"')
+        return lines
+
+    # ref ID を付与（操作可能な要素のみ）
+    ref_id = None
+    if role_lower in _AX_INTERACTIVE_ROLES:
+        ref_id = f'@e{counter[0]}'
+        counter[0] += 1
+        ref_map[ref_id] = {
+            'role': role,
+            'name': name,
+        }
+
+    # 行を構築
+    prefix = '  ' * indent
+    parts = []
+    if ref_id:
+        parts.append(f'[{ref_id} {role}]')
+    else:
+        parts.append(f'[{role}]')
+    if name:
+        parts.append(name)
+    if value:
+        parts.append(f'value="{value}"')
+
+    # checked / pressed 状態
+    if node.get('checked') is True:
+        parts.append('(checked)')
+    if node.get('pressed') is True:
+        parts.append('(pressed)')
+    if node.get('disabled') is True:
+        parts.append('(disabled)')
+    if node.get('expanded') is True:
+        parts.append('(expanded)')
+    elif node.get('expanded') is False:
+        parts.append('(collapsed)')
+
+    lines.append(f'{prefix}{" ".join(parts)}')
+
+    # 子ノードを再帰処理
+    for child in node.get('children', []):
+        lines.extend(_format_ax_node(child, ref_map, counter, indent + 1))
+
+    return lines
+
+
+async def get_accessibility_snapshot(*, url: str | None = None):
+    """
+    現在アクティブなタブの A11y Tree スナップショットを取得する
+
+    Args:
+        url: 指定されたらその URL に移動してから取得
+
+    Returns:
+        dict: {
+            'snapshot_text': str,  # ref ID 付きテキストスナップショット
+            'url': str,
+            'title': str,
+            'ref_map': dict,  # ref ID → ノード情報
+        }
+    """
+    logger.info("A11y スナップショット取得開始")
+
+    async with async_playwright() as p:
+        page, browser = await _get_active_page(p, url=url)
+
+        try:
+            current_url = page.url
+            await _page_wait_for_load_state(page)
+
+            try:
+                title = await page.title()
+            except Exception:
+                title = "Unknown"
+
+            # A11y tree を取得
+            ax_tree = await page.accessibility.snapshot(interesting_only=True)
+
+            if not ax_tree:
+                logger.warning("A11y tree が空です")
+                return {
+                    'snapshot_text': '(empty page)',
+                    'url': current_url,
+                    'title': title,
+                    'ref_map': {},
+                }
+
+            # ツリーをテキスト形式に変換
+            ref_map = {}
+            counter = [1]  # リストで参照渡し
+            lines = _format_ax_node(ax_tree, ref_map, counter)
+            snapshot_text = '\n'.join(lines)
+
+            logger.info(
+                f"A11y スナップショット取得完了: {current_url}, "
+                f"ref数={len(ref_map)}, 行数={len(lines)}"
+            )
+
+            return {
+                'snapshot_text': snapshot_text,
+                'url': current_url,
+                'title': title,
+                'ref_map': ref_map,
+            }
+
+        finally:
+            await browser.close()
+
+
 async def get_page_source(*, url: str | None = None):
     """
     現在アクティブなタブのソースコードを取得し、Downloads フォルダに保存する
@@ -692,13 +867,9 @@ async def get_visible_screenshot(
     # スクロール処理
     if page_y_offset_as_viewport_height > 0:
         # ビューポートの高さを取得
-        viewport_height = await page.evaluate(
-            "() => window.innerHeight"
-        )
+        viewport_height = await page.evaluate("() => window.innerHeight")
         # スクロール量を計算
-        scroll_y = int(
-            viewport_height * page_y_offset_as_viewport_height
-        )
+        scroll_y = int(viewport_height * page_y_offset_as_viewport_height)
         # スクロール実行
         await page.evaluate(f"() => window.scrollBy(0, {scroll_y})")
         # スクロール後の描画を待つ
@@ -905,9 +1076,7 @@ async def get_current_url():
     logger.info("現在の URL 取得開始")
 
     p = await async_playwright().start()
-    page, browser = await _get_active_page(
-        p, url=None, create_new_page=False
-    )
+    page, browser = await _get_active_page(p, url=None, create_new_page=False)
 
     try:
         # 現在の状態を取得
@@ -1287,8 +1456,7 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
 
     if system == "Darwin":
         chrome_paths = [
-            "/Applications/Google Chrome.app/Contents/MacOS/"
-            "Google Chrome",
+            "/Applications/Google Chrome.app/Contents/MacOS/" "Google Chrome",
             "/Applications/Google Chrome Canary.app/Contents/MacOS/"
             "Google Chrome Canary",
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -1304,8 +1472,7 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
     elif system == "Windows":
         chrome_paths = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application"
-            r"\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application" r"\chrome.exe",
         ]
 
     chrome_executable = None
@@ -1331,13 +1498,13 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
     ]
 
     if as_guest:
-        user_data_dir = os.path.expanduser(
-            "~/.google-chrome-debug-guest"
+        user_data_dir = os.path.expanduser("~/.google-chrome-debug-guest")
+        chrome_args.extend(
+            [
+                f"--user-data-dir={user_data_dir}",
+                "--guest",
+            ]
         )
-        chrome_args.extend([
-            f"--user-data-dir={user_data_dir}",
-            "--guest",
-        ])
     else:
         user_data_dir = os.path.expanduser("~/.google-chrome-debug")
         chrome_args.append(f"--user-data-dir={user_data_dir}")
@@ -1357,9 +1524,7 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
                 )
                 if response.status_code == 200:
                     version_info = response.json()
-                    browser_info = version_info.get(
-                        'Browser', 'Unknown'
-                    )
+                    browser_info = version_info.get('Browser', 'Unknown')
                     return {
                         'status': 'launched',
                         'message': (
@@ -1385,8 +1550,7 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
         return {
             'status': 'error',
             'message': (
-                f"Chrome の起動に失敗しました: "
-                f"{e.__class__.__name__}: {e}"
+                f"Chrome の起動に失敗しました: " f"{e.__class__.__name__}: {e}"
             ),
             'browser_info': None,
         }

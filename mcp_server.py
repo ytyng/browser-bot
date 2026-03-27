@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 from pydantic import Field
 
 from browser_bot import (
+    get_accessibility_snapshot,
     get_current_url,
     get_full_screenshot,
     get_page_source,
@@ -286,6 +287,51 @@ async def get_page_source_code(
 
     except Exception as e:
         error_msg = f"❌ エラー: ソースコード取得中に予期しないエラーが発生しました: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return error_msg
+
+
+# A11y Tree スナップショット取得ツール
+@server.tool(
+    name="browser_snapshot",
+    description=(
+        "Get accessibility tree snapshot of the current page. "
+        "Returns a text representation with ref IDs (@e1, @e2...) "
+        "for interactive elements. "
+        "Much faster and cheaper than screenshots for understanding "
+        "page structure."
+    ),
+)
+async def browser_snapshot_tool(
+    url: Annotated[
+        str | None,
+        Field(
+            description="Navigate to this URL first, then take snapshot.",
+            examples=["https://example.com"],
+        ),
+    ] = None,
+) -> str:
+    """A11y tree snapshot with ref IDs for interactive elements"""
+    logger.info(f"A11y スナップショットツール実行開始 (URL: {url})")
+
+    try:
+        result = await get_accessibility_snapshot(url=url)
+
+        response_parts = [
+            f"# {result['title']}",
+            f"URL: {result['url']}",
+            "",
+            result['snapshot_text'],
+        ]
+
+        logger.info(f"A11y スナップショットツール完了: {result['url']}")
+        return '\n'.join(response_parts)
+
+    except Exception as e:
+        error_msg = (
+            f"❌ エラー: A11y スナップショット取得中にエラー: "
+            f"{e.__class__.__name__}: {e}"
+        )
         logger.error(error_msg, exc_info=True)
         return error_msg
 
