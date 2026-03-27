@@ -13,6 +13,7 @@ import sys
 
 from browser_bot import (
     BrowserBotError,
+    get_accessibility_snapshot,
     get_current_url,
     get_full_screenshot,
     get_page_source,
@@ -52,6 +53,7 @@ def _print_json(data):
 
 # -- subcommand handlers --
 
+
 def cmd_browser_use(args):
     task_text = _read_stdin_or_exit("タスクテキスト")
     result = asyncio.run(
@@ -64,6 +66,14 @@ def cmd_browser_use(args):
     print(str(result))
 
 
+def cmd_snapshot(args):
+    result = asyncio.run(get_accessibility_snapshot(url=args.url))
+    print(f"# {result['title']}")
+    print(f"URL: {result['url']}")
+    print()
+    print(result['snapshot_text'])
+
+
 def cmd_get_source(args):
     result = asyncio.run(get_page_source(url=args.url))
     _print_json(result)
@@ -73,9 +83,7 @@ def cmd_visible_screenshot(args):
     result = asyncio.run(
         get_visible_screenshot(
             url=args.url,
-            page_y_offset_as_viewport_height=(
-                args.scroll
-            ),
+            page_y_offset_as_viewport_height=(args.scroll),
             include_image_binary=False,
         )
     )
@@ -113,16 +121,12 @@ def cmd_current_url(args):
 
 
 def cmd_super_reload(args):
-    result = asyncio.run(
-        super_reload(url=args.url, mode=args.mode)
-    )
+    result = asyncio.run(super_reload(url=args.url, mode=args.mode))
     _print_json(result)
 
 
 def cmd_launch_chrome(args):
-    result = asyncio.run(
-        launch_chrome(as_guest=not args.no_guest)
-    )
+    result = asyncio.run(launch_chrome(as_guest=not args.no_guest))
     _print_json(result)
 
 
@@ -153,11 +157,13 @@ def cmd_http_request(args):
     else:
         body_text = base64.b64encode(body).decode('utf-8')
 
-    _print_json({
-        "status": response_data['status'],
-        "headers": response_data['headers'],
-        "body": body_text,
-    })
+    _print_json(
+        {
+            "status": response_data['status'],
+            "headers": response_data['headers'],
+            "body": body_text,
+        }
+    )
 
 
 def cmd_login_screenshot(args):
@@ -227,6 +233,14 @@ def build_parser():
     p.add_argument('--url', type=str, default=None)
     p.set_defaults(func=cmd_browser_use)
 
+    # snapshot
+    p = sub.add_parser(
+        'snapshot',
+        help='A11y tree スナップショットを取得 (ref ID 付き)',
+    )
+    p.add_argument('--url', type=str, default=None)
+    p.set_defaults(func=cmd_snapshot)
+
     # get-source
     p = sub.add_parser(
         'get-source',
@@ -242,7 +256,9 @@ def build_parser():
     )
     p.add_argument('--url', type=str, default=None)
     p.add_argument(
-        '--scroll', type=float, default=0.0,
+        '--scroll',
+        type=float,
+        default=0.0,
         help='ビューポート高さの倍率でスクロール (例: 1.0=1ページ分)',
     )
     p.set_defaults(func=cmd_visible_screenshot)
@@ -285,7 +301,9 @@ def build_parser():
     )
     p.add_argument('--url', type=str, default=None)
     p.add_argument(
-        '--mode', type=str, default='cdp',
+        '--mode',
+        type=str,
+        default='cdp',
         choices=['cdp', 'javascript', 'keyboard'],
     )
     p.set_defaults(func=cmd_super_reload)
@@ -296,7 +314,8 @@ def build_parser():
         help='Chrome をデバッグポート付きで起動',
     )
     p.add_argument(
-        '--no-guest', action='store_true',
+        '--no-guest',
+        action='store_true',
         help='通常モードで起動 (デフォルトはゲストモード)',
     )
     p.set_defaults(func=cmd_launch_chrome)
@@ -308,15 +327,24 @@ def build_parser():
     )
     p.add_argument('request_url', help='リクエスト先 URL')
     p.add_argument(
-        '--method', type=str, default='get',
+        '--method',
+        type=str,
+        default='get',
         choices=[
-            'get', 'post', 'put', 'delete',
-            'patch', 'head', 'options',
+            'get',
+            'post',
+            'put',
+            'delete',
+            'patch',
+            'head',
+            'options',
         ],
     )
     p.add_argument('--preload-url', type=str, default=None)
     p.add_argument(
-        '--headers', type=str, default=None,
+        '--headers',
+        type=str,
+        default=None,
         help='HTTP ヘッダー (JSON 文字列)',
     )
     p.set_defaults(func=cmd_http_request)
@@ -328,31 +356,42 @@ def build_parser():
     )
     p.add_argument('--url', type=str, required=True)
     p.add_argument(
-        '--username-selector', type=str,
+        '--username-selector',
+        type=str,
         default='input[name="j_username"]',
     )
     p.add_argument(
-        '--password-selector', type=str,
+        '--password-selector',
+        type=str,
         default='input[name="j_password"]',
     )
     p.add_argument(
-        '--submit-selector', type=str,
+        '--submit-selector',
+        type=str,
         default='button[type="submit"]',
     )
     p.add_argument(
-        '--username-env', type=str, default='JENKINS_USERNAME',
+        '--username-env',
+        type=str,
+        default='JENKINS_USERNAME',
         help='ユーザー名の環境変数名',
     )
     p.add_argument(
-        '--password-env', type=str, default='JENKINS_PASSWORD',
+        '--password-env',
+        type=str,
+        default='JENKINS_PASSWORD',
         help='パスワードの環境変数名',
     )
     p.add_argument(
-        '--env-file', type=str, default=None,
+        '--env-file',
+        type=str,
+        default=None,
         help='追加の .env ファイルパス',
     )
     p.add_argument(
-        '--post-login-wait', type=float, default=3.0,
+        '--post-login-wait',
+        type=float,
+        default=3.0,
         help='ログイン後の待機秒数',
     )
     p.set_defaults(func=cmd_login_screenshot)
@@ -364,11 +403,15 @@ def build_parser():
     )
     p.add_argument('--url', type=str, default=None)
     p.add_argument(
-        '--categories', type=str, default=None,
+        '--categories',
+        type=str,
+        default=None,
         help='カンマ区切り (例: performance,accessibility)',
     )
     p.add_argument(
-        '--device', type=str, default='desktop',
+        '--device',
+        type=str,
+        default='desktop',
         choices=['desktop', 'mobile'],
     )
     p.add_argument('--timeout', type=int, default=120)
