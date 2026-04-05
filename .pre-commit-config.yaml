@@ -52,4 +52,5 @@ repos:
       - id: fix-byte-order-marker # BOM を削除
       - id: trailing-whitespace # 行末の空白を削除
       - id: detect-aws-credentials # AWS の認証情報を検出
+        args: [--allow-missing-credentials]
       - id: detect-private-key # 秘密鍵を検出
