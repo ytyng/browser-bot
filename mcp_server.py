@@ -10,7 +10,7 @@ BrowserUse を使用する MCP サーバーの実装
     - Chrome が --remote-debugging-port=9222 で起動していること
     - 必要な環境変数が設定されていること (OPENAI_API_KEY など)
 """
-import asyncio
+
 import base64
 import json
 import os
@@ -20,7 +20,7 @@ from typing import Annotated
 from logging_config import logger
 
 # テレメトリを無効化
-os.environ['ANONYMIZED_TELEMETRY'] = 'false'
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
 
 import fastmcp
 from dotenv import load_dotenv
@@ -232,10 +232,12 @@ async def browser_use_local_chrome(
         result_text = await run_task(
             task=task_text, max_steps=max_steps, url=url
         )
-        logger.info(f"MCP ツール実行完了: 成功")
+        logger.info("MCP ツール実行完了: 成功")
         return str(result_text)
     except Exception as e:
-        error_msg = f"❌ エラー: タスク実行中に予期しないエラーが発生しました: {str(e)}"
+        error_msg = (
+            f"❌ エラー: タスク実行中に予期しないエラーが発生しました: {e!s}"
+        )
         logger.error(error_msg, exc_info=True)
         return error_msg
 
@@ -243,7 +245,8 @@ async def browser_use_local_chrome(
 # ソースコード取得ツール
 @server.tool(
     name="get_page_source_code",
-    description="""Browser_bot (Chrome) の現在アクティブなタブ (または指定された URL のソースコード)を取得します。
+    description="""Browser_bot (Chrome) の現在アクティブなタブ
+(または指定された URL のソースコード)を取得します。
 
 現在の URL とページタイトルも取得します。
 
@@ -270,23 +273,23 @@ async def get_page_source_code(
     try:
         result = await get_page_source(url=url)
 
-        if 'error' in result:
+        if "error" in result:
             logger.error(f"ソースコード取得エラー: {result['error']}")
-            return result['error']
+            return result["error"]
 
         logger.info(f"ソースコード取得ツール実行完了: {result['url']}")
 
         # JSON レスポンスを構築
         response = {
-            'file_path': result['file_path'],
-            'url': result['url'],
-            'title': result['title'],
+            "file_path": result["file_path"],
+            "url": result["url"],
+            "title": result["title"],
         }
 
         return json.dumps(response, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        error_msg = f"❌ エラー: ソースコード取得中に予期しないエラーが発生しました: {str(e)}"
+        error_msg = f"❌ エラー: ソースコード取得中に予期しないエラーが発生しました: {e!s}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 
@@ -321,11 +324,11 @@ async def browser_snapshot_tool(
             f"# {result['title']}",
             f"URL: {result['url']}",
             "",
-            result['snapshot_text'],
+            result["snapshot_text"],
         ]
 
         logger.info(f"A11y スナップショットツール完了: {result['url']}")
-        return '\n'.join(response_parts)
+        return "\n".join(response_parts)
 
     except Exception as e:
         error_msg = (
@@ -401,9 +404,9 @@ async def get_visible_screenshot_tool(
             include_image_binary=False,
         )
 
-        if 'error' in result:
+        if "error" in result:
             logger.error(f"スクリーンショット取得エラー: {result['error']}")
-            return result['error']
+            return result["error"]
 
         logger.info(
             f"表示箇所のスクリーンショット取得ツール実行完了: {result['url']}"
@@ -411,9 +414,9 @@ async def get_visible_screenshot_tool(
 
         # JSON レスポンスを構築
         response = {
-            'file_path': result['file_path'],
-            'url': result['url'],
-            'title': result['title'],
+            "file_path": result["file_path"],
+            "url": result["url"],
+            "title": result["title"],
         }
 
         # include_image_binary が True の場合は画像バイナリを base64 エンコードして含める
@@ -425,7 +428,7 @@ async def get_visible_screenshot_tool(
         return json.dumps(response, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
+        error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {e!s}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 
@@ -458,9 +461,9 @@ async def get_full_screenshot_tool(
     try:
         result = await get_full_screenshot(url=url, include_image_binary=False)
 
-        if 'error' in result:
+        if "error" in result:
             logger.error(f"スクリーンショット取得エラー: {result['error']}")
-            return result['error']
+            return result["error"]
 
         logger.info(
             f"全領域のスクリーンショット取得ツール実行完了: {result['url']}"
@@ -468,9 +471,9 @@ async def get_full_screenshot_tool(
 
         # JSON レスポンスを構築
         response = {
-            'file_path': result['file_path'],
-            'url': result['url'],
-            'title': result['title'],
+            "file_path": result["file_path"],
+            "url": result["url"],
+            "title": result["title"],
         }
 
         # include_image_binary が True の場合は画像バイナリを base64 エンコードして含める
@@ -482,7 +485,7 @@ async def get_full_screenshot_tool(
         return json.dumps(response, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {str(e)}"
+        error_msg = f"❌ エラー: スクリーンショット取得中に予期しないエラーが発生しました: {e!s}"
         logger.error(error_msg, exc_info=True)
         return error_msg
 
@@ -490,7 +493,8 @@ async def get_full_screenshot_tool(
 # JavaScript 実行ツール
 @server.tool(
     name="run_javascript_in_browser",
-    description="""Browser_bot (Chrome) の現在アクティブなタブまたは指定された URL で JavaScript を実行します。
+    description="""Browser_bot (Chrome) の現在アクティブなタブ
+または指定された URL で JavaScript を実行します。
 
 このツールは Browser_bot (Chrome) に Playwright を使用して接続し、指定された JavaScript コードを実行します。
 
@@ -543,14 +547,21 @@ async def run_javascript_in_browser(
             max_length=10000,
             examples=[
                 "document.getElementById('login-button').click()",
-                "document.querySelector('input[type=\"email\"]').value = "
-                "'user@example.com'; "
-                "document.querySelector('input[type=\"password\"]').value = "
-                "'password123'; document.querySelector('form').submit()",
-                "Array.from(document.querySelectorAll('.item')).forEach(el => "
-                "el.style.backgroundColor = 'yellow')",
-                "window.scrollTo(0, 0); "
-                "setTimeout(() => window.print(), 1000)",
+                (
+                    "document.querySelector('input[type=\"email\"]')"
+                    ".value = 'user@example.com'; "
+                    "document.querySelector('input[type=\"password\"]')"
+                    ".value = 'password123'; "
+                    "document.querySelector('form').submit()"
+                ),
+                (
+                    "Array.from(document.querySelectorAll('.item'))"
+                    ".forEach(el => el.style.backgroundColor = 'yellow')"
+                ),
+                (
+                    "window.scrollTo(0, 0); "
+                    "setTimeout(() => window.print(), 1000)"
+                ),
             ],
         ),
     ],
@@ -573,7 +584,7 @@ async def run_javascript_in_browser(
         result = await run_script(script=script, url=url)
 
         success_msg = "✅ JavaScript の実行が完了しました"
-        logger.info(f'{success_msg}: {result=}')
+        logger.info(f"{success_msg}: {result=}")
         return json.dumps(
             {"message": success_msg, "result": result},
             ensure_ascii=False,
@@ -603,20 +614,20 @@ async def get_current_url_tool() -> str:
     try:
         result = await get_current_url()
 
-        if 'error' in result:
+        if "error" in result:
             logger.error(f"URL 取得エラー: {result['error']}")
-            return result['error']
+            return result["error"]
 
         # 結果を整形して返す
         response = f"""# 現在のページ情報
 
 ## URL
 
-{result['url']}
+{result["url"]}
 
 ## タイトル
 
-{result['title']}
+{result["title"]}
 """
 
         logger.info(f"現在の URL 取得ツール実行完了: {result['url']}")
@@ -631,7 +642,8 @@ async def get_current_url_tool() -> str:
 # スーパーリロードツール
 @server.tool(
     name="super_reload",
-    description="""Browser_bot (Chrome) の現在アクティブなタブでスーパーリロード (キャッシュを無視してリロード) を実行します。
+    description="""Browser_bot (Chrome) の現在アクティブなタブで
+スーパーリロード (キャッシュを無視してリロード) を実行します。
 """,
 )
 async def super_reload_tool(
@@ -664,20 +676,20 @@ async def super_reload_tool(
     try:
         result = await super_reload(url=url, mode=mode)
 
-        if 'error' in result:
+        if "error" in result:
             logger.error(f"スーパーリロードエラー: {result['error']}")
-            return result['error']
+            return result["error"]
 
         # 結果を整形して返す
         response = f"""# スーパーリロード完了
 
 ## URL
 
-{result['url']}
+{result["url"]}
 
 ## タイトル
 
-{result['title']}
+{result["title"]}
 
 ✅ キャッシュを無視してページを再読み込みしました。
 """
@@ -719,11 +731,11 @@ async def launch_chrome_with_debug(
 
     result = await launch_chrome(as_guest=as_guest)
 
-    status = result['status']
-    message = result['message']
-    browser_info = result.get('browser_info')
+    status = result["status"]
+    message = result["message"]
+    browser_info = result.get("browser_info")
 
-    if status == 'error':
+    if status == "error":
         logger.error(f"Chrome 起動エラー: {message}")
         return f"❌ エラー: {message}"
 
@@ -821,19 +833,19 @@ async def http_request_tool(
         )
 
         # レスポンス本文をテキストとして処理
-        response_body = response_data['body']
-        content_type = response_data['headers'].get("content-type", "")
+        response_body = response_data["body"]
+        content_type = response_data["headers"].get("content-type", "")
 
         # レスポンスが文字列っぽければデコードを試みる
         # そうでなければ、バイナリデータなので base64 エンコードして返す
         if "text" in content_type or "json" in content_type:
-            response_text = response_body.decode('utf-8', errors='replace')
+            response_text = response_body.decode("utf-8", errors="replace")
         else:
-            response_text = base64.b64encode(response_body).decode('utf-8')
+            response_text = base64.b64encode(response_body).decode("utf-8")
 
         result = {
-            "status": response_data['status'],
-            "headers": response_data['headers'],
+            "status": response_data["status"],
+            "headers": response_data["headers"],
             "body": response_text,
         }
 
@@ -978,7 +990,7 @@ def main() -> None:
     logger.info("MCP サーバー起動中...")
 
     # 必要な環境変数のチェック
-    required_env_vars = ['OPENAI_API_KEY']
+    required_env_vars = ["OPENAI_API_KEY"]
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 
     if missing_vars:

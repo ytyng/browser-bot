@@ -4,6 +4,7 @@ browser-bot CLI - Chrome ブラウザ自動操作の CLI インターフェイ�
 
 MCP サーバーと同じ機能をコマンドラインから利用可能にする。
 """
+
 import argparse
 import asyncio
 import base64
@@ -30,7 +31,7 @@ from browser_bot import (
 
 
 def _read_stdin_or_exit(label: str) -> str:
-    """stdin からテキストを読み取り、空なら終了する"""
+    """Stdin からテキストを読み取り、空なら終了する"""
     if sys.stdin.isatty():
         print(
             f"Error: {label} を標準入力から渡してください",
@@ -71,7 +72,7 @@ def cmd_snapshot(args):
     print(f"# {result['title']}")
     print(f"URL: {result['url']}")
     print()
-    print(result['snapshot_text'])
+    print(result["snapshot_text"])
 
 
 def cmd_get_source(args):
@@ -150,17 +151,17 @@ def cmd_http_request(args):
         )
     )
 
-    body = response_data['body']
-    content_type = response_data['headers'].get("content-type", "")
+    body = response_data["body"]
+    content_type = response_data["headers"].get("content-type", "")
     if "text" in content_type or "json" in content_type:
-        body_text = body.decode('utf-8', errors='replace')
+        body_text = body.decode("utf-8", errors="replace")
     else:
-        body_text = base64.b64encode(body).decode('utf-8')
+        body_text = base64.b64encode(body).decode("utf-8")
 
     _print_json(
         {
-            "status": response_data['status'],
-            "headers": response_data['headers'],
+            "status": response_data["status"],
+            "headers": response_data["headers"],
             "body": body_text,
         }
     )
@@ -200,7 +201,7 @@ def cmd_login_screenshot(args):
 def cmd_lighthouse(args):
     categories = None
     if args.categories:
-        categories = [c.strip() for c in args.categories.split(',')]
+        categories = [c.strip() for c in args.categories.split(",")]
 
     result = asyncio.run(
         run_lighthouse(
@@ -215,206 +216,206 @@ def cmd_lighthouse(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog='browser-bot-cli',
+        prog="browser-bot-cli",
         description=(
-            'Chrome ブラウザ自動操作 CLI。'
-            'MCP サーバーと同じ機能をコマンドラインから利用できます。'
+            "Chrome ブラウザ自動操作 CLI。"
+            "MCP サーバーと同じ機能をコマンドラインから利用できます。"
         ),
     )
 
-    sub = parser.add_subparsers(dest='command')
+    sub = parser.add_subparsers(dest="command")
 
     # browser-use
     p = sub.add_parser(
-        'browser-use',
-        help='browser_use でブラウザ操作タスクを実行 (stdin: タスク)',
+        "browser-use",
+        help="browser_use でブラウザ操作タスクを実行 (stdin: タスク)",
     )
-    p.add_argument('--max-steps', type=int, default=7)
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--max-steps", type=int, default=7)
+    p.add_argument("--url", type=str, default=None)
     p.set_defaults(func=cmd_browser_use)
 
     # snapshot
     p = sub.add_parser(
-        'snapshot',
-        help='A11y tree スナップショットを取得 (ref ID 付き)',
+        "snapshot",
+        help="A11y tree スナップショットを取得 (ref ID 付き)",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.set_defaults(func=cmd_snapshot)
 
     # get-source
     p = sub.add_parser(
-        'get-source',
-        help='ページの HTML ソースを取得して Downloads に保存',
+        "get-source",
+        help="ページの HTML ソースを取得して Downloads に保存",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.set_defaults(func=cmd_get_source)
 
     # visible-screenshot
     p = sub.add_parser(
-        'visible-screenshot',
-        help='表示領域のスクリーンショットを取得',
+        "visible-screenshot",
+        help="表示領域のスクリーンショットを取得",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.add_argument(
-        '--scroll',
+        "--scroll",
         type=float,
         default=0.0,
-        help='ビューポート高さの倍率でスクロール (例: 1.0=1ページ分)',
+        help="ビューポート高さの倍率でスクロール (例: 1.0=1ページ分)",
     )
     p.set_defaults(func=cmd_visible_screenshot)
 
     # full-screenshot
     p = sub.add_parser(
-        'full-screenshot',
-        help='ページ全体のスクリーンショットを取得',
+        "full-screenshot",
+        help="ページ全体のスクリーンショットを取得",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.set_defaults(func=cmd_full_screenshot)
 
     # run-js
     p = sub.add_parser(
-        'run-js',
-        help='JavaScript を実行 (stdin: JS コード)',
+        "run-js",
+        help="JavaScript を実行 (stdin: JS コード)",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.set_defaults(func=cmd_run_js)
 
     # python-script
     p = sub.add_parser(
-        'python-script',
-        help='Playwright Python スクリプトを実行 (stdin: コード)',
+        "python-script",
+        help="Playwright Python スクリプトを実行 (stdin: コード)",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.set_defaults(func=cmd_python_script)
 
     # current-url
     p = sub.add_parser(
-        'current-url',
-        help='アクティブタブの URL とタイトルを取得',
+        "current-url",
+        help="アクティブタブの URL とタイトルを取得",
     )
     p.set_defaults(func=cmd_current_url)
 
     # super-reload
     p = sub.add_parser(
-        'super-reload',
-        help='キャッシュ無視でページをリロード',
+        "super-reload",
+        help="キャッシュ無視でページをリロード",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.add_argument(
-        '--mode',
+        "--mode",
         type=str,
-        default='cdp',
-        choices=['cdp', 'javascript', 'keyboard'],
+        default="cdp",
+        choices=["cdp", "javascript", "keyboard"],
     )
     p.set_defaults(func=cmd_super_reload)
 
     # launch-chrome
     p = sub.add_parser(
-        'launch-chrome',
-        help='Chrome をデバッグポート付きで起動',
+        "launch-chrome",
+        help="Chrome をデバッグポート付きで起動",
     )
     p.add_argument(
-        '--no-guest',
-        action='store_true',
-        help='通常モードで起動 (デフォルトはゲストモード)',
+        "--no-guest",
+        action="store_true",
+        help="通常モードで起動 (デフォルトはゲストモード)",
     )
     p.set_defaults(func=cmd_launch_chrome)
 
     # http-request
     p = sub.add_parser(
-        'http-request',
-        help='ブラウザセッションで HTTP リクエスト送信 (stdin: body)',
+        "http-request",
+        help="ブラウザセッションで HTTP リクエスト送信 (stdin: body)",
     )
-    p.add_argument('request_url', help='リクエスト先 URL')
+    p.add_argument("request_url", help="リクエスト先 URL")
     p.add_argument(
-        '--method',
+        "--method",
         type=str,
-        default='get',
+        default="get",
         choices=[
-            'get',
-            'post',
-            'put',
-            'delete',
-            'patch',
-            'head',
-            'options',
+            "get",
+            "post",
+            "put",
+            "delete",
+            "patch",
+            "head",
+            "options",
         ],
     )
-    p.add_argument('--preload-url', type=str, default=None)
+    p.add_argument("--preload-url", type=str, default=None)
     p.add_argument(
-        '--headers',
+        "--headers",
         type=str,
         default=None,
-        help='HTTP ヘッダー (JSON 文字列)',
+        help="HTTP ヘッダー (JSON 文字列)",
     )
     p.set_defaults(func=cmd_http_request)
 
     # login-screenshot
     p = sub.add_parser(
-        'login-screenshot',
-        help='ログインしてフルスクリーンショットを取得',
+        "login-screenshot",
+        help="ログインしてフルスクリーンショットを取得",
     )
-    p.add_argument('--url', type=str, required=True)
+    p.add_argument("--url", type=str, required=True)
     p.add_argument(
-        '--username-selector',
+        "--username-selector",
         type=str,
         default='input[name="j_username"]',
     )
     p.add_argument(
-        '--password-selector',
+        "--password-selector",
         type=str,
         default='input[name="j_password"]',
     )
     p.add_argument(
-        '--submit-selector',
+        "--submit-selector",
         type=str,
         default='button[type="submit"]',
     )
     p.add_argument(
-        '--username-env',
+        "--username-env",
         type=str,
-        default='JENKINS_USERNAME',
-        help='ユーザー名の環境変数名',
+        default="JENKINS_USERNAME",
+        help="ユーザー名の環境変数名",
     )
     p.add_argument(
-        '--password-env',
+        "--password-env",
         type=str,
-        default='JENKINS_PASSWORD',
-        help='パスワードの環境変数名',
+        default="JENKINS_PASSWORD",
+        help="パスワードの環境変数名",
     )
     p.add_argument(
-        '--env-file',
+        "--env-file",
         type=str,
         default=None,
-        help='追加の .env ファイルパス',
+        help="追加の .env ファイルパス",
     )
     p.add_argument(
-        '--post-login-wait',
+        "--post-login-wait",
         type=float,
         default=3.0,
-        help='ログイン後の待機秒数',
+        help="ログイン後の待機秒数",
     )
     p.set_defaults(func=cmd_login_screenshot)
 
     # lighthouse
     p = sub.add_parser(
-        'lighthouse',
-        help='Lighthouse パフォーマンス監査を実行',
+        "lighthouse",
+        help="Lighthouse パフォーマンス監査を実行",
     )
-    p.add_argument('--url', type=str, default=None)
+    p.add_argument("--url", type=str, default=None)
     p.add_argument(
-        '--categories',
+        "--categories",
         type=str,
         default=None,
-        help='カンマ区切り (例: performance,accessibility)',
+        help="カンマ区切り (例: performance,accessibility)",
     )
     p.add_argument(
-        '--device',
+        "--device",
         type=str,
-        default='desktop',
-        choices=['desktop', 'mobile'],
+        default="desktop",
+        choices=["desktop", "mobile"],
     )
-    p.add_argument('--timeout', type=int, default=120)
+    p.add_argument("--timeout", type=int, default=120)
     p.set_defaults(func=cmd_lighthouse)
 
     return parser
@@ -435,5 +436,5 @@ def main():
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
