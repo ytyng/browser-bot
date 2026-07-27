@@ -12,7 +12,7 @@ from datetime import datetime
 from logging_config import broser_console_logger, logger
 
 # テレメトリを無効化
-os.environ['ANONYMIZED_TELEMETRY'] = 'false'
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
 
 import io
 
@@ -48,19 +48,13 @@ class BrowserBotError(Exception):
 class BrowserBotTaskAbortedError(BrowserBotError):
     """タスクが中断された場合に raise する例外"""
 
-    pass
-
 
 class BrowserBotTaskFailedError(BrowserBotError):
     """タスクが失敗した場合に raise する例外"""
 
-    pass
-
 
 class BrowserRuntimeError(BrowserBotError):
     """Chrome が起動していない場合に raise する例外"""
-
-    pass
 
 
 async def _navigate_to(page, url):
@@ -75,7 +69,7 @@ async def _navigate_to(page, url):
 
 
 async def _page_wait_for_load_state(
-    page, state='domcontentloaded', timeout=7000
+    page, state="domcontentloaded", timeout=7000
 ):
     """
     ページのロード状態を段階的にフォールバックしながら待機する共通関数
@@ -87,6 +81,7 @@ async def _page_wait_for_load_state(
 
     Returns:
         str: 実際に使用されたロード状態
+
     """
     try:
         await page.wait_for_load_state(state, timeout=timeout)
@@ -96,21 +91,21 @@ async def _page_wait_for_load_state(
         logger.warning(f"ロード状態 '{state}' の待機がタイムアウト: {e}")
 
         # networkidle に失敗した場合は domcontentloaded を試行
-        if state == 'networkidle':
+        if state == "networkidle":
             try:
                 await page.wait_for_load_state(
-                    'domcontentloaded', timeout=5000
+                    "domcontentloaded", timeout=5000
                 )
                 logger.debug("DOM読み込み完了状態で続行")
-                return 'domcontentloaded'
+                return "domcontentloaded"
             except PlaywrightTimeoutError as e2:
                 logger.warning(f"DOM読み込み待機もタイムアウト: {e2}")
                 logger.debug("ロード状態の待機をスキップして続行")
-                return 'skipped'
+                return "skipped"
 
         # その他の状態に失敗した場合はスキップ
         logger.debug(f"ロード状態 '{state}' の待機をスキップして続行")
-        return 'skipped'
+        return "skipped"
 
 
 async def _check_chrome_running():
@@ -119,18 +114,19 @@ async def _check_chrome_running():
 
     Returns:
         str | None: エラーメッセージ、または None（正常時）
+
     """
     if BROWSER_BOT_USE_REMOTE:
         # リモートブラウザ使用時はチェックしない
         logger.debug(
-            f'Using remote browser. SELENIUM_REMOTE_URL={SELENIUM_REMOTE_URL}'
+            f"Using remote browser. SELENIUM_REMOTE_URL={SELENIUM_REMOTE_URL}"
         )
         return
 
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f'{CHROME_DEBUG_URL}/json/version', timeout=5.0
+                f"{CHROME_DEBUG_URL}/json/version", timeout=5.0
             )
             if response.status_code != 200:
                 error_msg = (
@@ -147,7 +143,10 @@ async def _check_chrome_running():
         logger.error(error_msg)
         raise BrowserRuntimeError(error_msg)
     except httpx.TimeoutException:
-        error_msg = "❌ エラー: Chrome への接続がタイムアウトしました。Chrome が正常に起動しているか確認してください。"
+        error_msg = (
+            "❌ エラー: Chrome への接続がタイムアウトしました。"
+            "Chrome が正常に起動しているか確認してください。"
+        )
         logger.error(error_msg)
         raise BrowserRuntimeError(error_msg)
     except Exception as e:
@@ -172,6 +171,7 @@ async def _get_browser_connection(playwright_instance):
 
     Returns:
         Browser: 接続されたブラウザインスタンス
+
     """
     if BROWSER_BOT_USE_REMOTE:
         from selenium_remote import get_cdp_url_from_selenium_grid
@@ -181,32 +181,29 @@ async def _get_browser_connection(playwright_instance):
         # Selenium Grid から CDP URL を取得
         cdp_url = await get_cdp_url_from_selenium_grid(SELENIUM_REMOTE_URL)
         # リモートブラウザに接続（CDP URL 使用）
-        browser = await playwright_instance.chromium.connect_over_cdp(cdp_url)
-        return browser
-    else:
-        # Chrome が起動しているか確認
-        await _check_chrome_running()
+        return await playwright_instance.chromium.connect_over_cdp(cdp_url)
+    # Chrome が起動しているか確認
+    await _check_chrome_running()
 
-        # ローカル Chrome の CDP エンドポイントに接続
-        browser = await playwright_instance.chromium.connect_over_cdp(
-            CHROME_DEBUG_URL
-        )
-        return browser
+    # ローカル Chrome の CDP エンドポイントに接続
+    return await playwright_instance.chromium.connect_over_cdp(
+        CHROME_DEBUG_URL
+    )
 
 
 # LLM モデルを取得する関数
 def get_llm():
 
-    _llm_model_name = os.getenv('BROWSER_USE_LLM_MODEL', None)
+    _llm_model_name = os.getenv("BROWSER_USE_LLM_MODEL", None)
     if _llm_model_name:
-        if _llm_model_name.startswith('gemini'):
+        if _llm_model_name.startswith("gemini"):
             # Google Gemini
             from langchain_google_genai import ChatGoogleGenerativeAI
 
             return ChatGoogleGenerativeAI(
                 model=_llm_model_name, temperature=0.0
             )
-        elif _llm_model_name.startswith('claude'):
+        if _llm_model_name.startswith("claude"):
             # Anthropic Claude (browser_use から直接インポート)
             from browser_use import ChatAnthropic
 
@@ -230,6 +227,7 @@ async def run_task(
         task: 実行するタスクの説明
         max_steps: 最大ステップ数
         url: 最初に開く URL（指定された場合）
+
     """
     logger.info(f"タスク開始: {task}")
 
@@ -238,7 +236,7 @@ async def run_task(
 
     if max_steps is None:
         # 環境変数から max_steps を取得
-        max_steps = int(os.getenv('BROWSER_USE_MAX_STEPS', 7))
+        max_steps = int(os.getenv("BROWSER_USE_MAX_STEPS", "7"))
 
     logger.debug(f"{max_steps=}")
 
@@ -266,7 +264,7 @@ async def run_task(
     try:
         page = await browser_session.get_current_page()
         _setup_page_logging(page)
-        await page.wait_for_load_state('networkidle')
+        await page.wait_for_load_state("networkidle")
     except Exception as e:
         error_msg = f"❌ エラー: エージェント実行中にエラーが発生しました: {e.__class__.__name__}: {e}"
         logger.error(error_msg, exc_info=True)
@@ -281,7 +279,7 @@ async def run_task(
             # URL に遷移
             await _navigate_to(page, url)
             load_state = await _page_wait_for_load_state(page)
-            if load_state == 'skipped':
+            if load_state == "skipped":
                 logger.info(f"✅ {url} への遷移を続行")
             else:
                 logger.info(f"✅ {url} への遷移完了（{load_state}）")
@@ -311,7 +309,7 @@ async def run_task(
             f"タスク完了 (max_steps={max_steps}): {str(result)[:200]}..."
         )  # 最初の200文字のみログに記録
         return result
-    except asyncio.TimeoutError:
+    except TimeoutError:
         error_msg = f"❌ エラー: エージェント実行が{timeout_seconds}秒でタイムアウトしました"
         logger.error(error_msg)
         raise BrowserBotTaskFailedError(error_msg)
@@ -336,8 +334,9 @@ async def _get_active_page(
 
     Returns:
         tuple: (page, browser) または (None, None)
+
     """
-    if url and url.lower() in {'null', 'none', 'undefined', ''}:
+    if url and url.lower() in {"null", "none", "undefined", ""}:
         url = None
 
     # ブラウザに接続
@@ -363,10 +362,10 @@ async def _get_active_page(
                     page_url = page.url
                     if page_url.startswith(
                         (
-                            'devtools://',
-                            'chrome://',
-                            'chrome-extension://',
-                            'moz-extension://',
+                            "devtools://",
+                            "chrome://",
+                            "chrome-extension://",
+                            "moz-extension://",
                         )
                     ):
                         logger.debug(
@@ -386,19 +385,16 @@ async def _get_active_page(
                     "最新のアクティブページが特定できないため、最初のページを使用します"
                 )
 
+        # ページが取得できなかった
+        elif create_new_page:
+            # 無かった場合に作る設定になっている
+            # 新しいページを作成
+            active_page = await browser.new_page()
+            all_pages = [active_page]
         else:
-            # ページが取得できなかった
-            if create_new_page:
-                # 無かった場合に作る設定になっている
-                # 新しいページを作成
-                active_page = await browser.new_page()
-                all_pages = [active_page]
-            else:
-                error_msg = (
-                    "❌ エラー: Chrome にアクティブなページがありません"
-                )
-                logger.error(error_msg)
-                raise BrowserRuntimeError(error_msg)
+            error_msg = "❌ エラー: Chrome にアクティブなページがありません"
+            logger.error(error_msg)
+            raise BrowserRuntimeError(error_msg)
 
         logger.info(f"アクティブページを特定: {active_page.url}")
 
@@ -429,6 +425,7 @@ async def _find_most_recent_active_page(pages):
 
     Returns:
         page: 最もアクティブなページ、または None
+
     """
     try:
         # ページの情報を収集
@@ -444,10 +441,10 @@ async def _find_most_recent_active_page(pages):
                 # DevTools や特殊なプロトコルのページをスキップ
                 if url.startswith(
                     (
-                        'devtools://',
-                        'chrome://',
-                        'chrome-extension://',
-                        'moz-extension://',
+                        "devtools://",
+                        "chrome://",
+                        "chrome-extension://",
+                        "moz-extension://",
                     )
                 ):
                     logger.debug(f"特殊プロトコルページをスキップ: {url}")
@@ -474,14 +471,14 @@ async def _find_most_recent_active_page(pages):
 
                 page_info.append(
                     {
-                        'page': page,
-                        'url': url,
-                        'title': title,
-                        'has_focus': last_activity.get('hasFocus', False),
-                        'visibility_state': last_activity.get(
-                            'visibilityState', 'hidden'
+                        "page": page,
+                        "url": url,
+                        "title": title,
+                        "has_focus": last_activity.get("hasFocus", False),
+                        "visibility_state": last_activity.get(
+                            "visibilityState", "hidden"
                         ),
-                        'timestamp': last_activity.get('timestamp', 0),
+                        "timestamp": last_activity.get("timestamp", 0),
                     }
                 )
 
@@ -500,9 +497,9 @@ async def _find_most_recent_active_page(pages):
         # 3. タイムスタンプが新しいページ
         page_info.sort(
             key=lambda x: (
-                x['has_focus'],
-                x['visibility_state'] == 'visible',
-                x['timestamp'],
+                x["has_focus"],
+                x["visibility_state"] == "visible",
+                x["timestamp"],
             ),
             reverse=True,
         )
@@ -516,7 +513,7 @@ async def _find_most_recent_active_page(pages):
             f"表示状態: {selected_page['visibility_state']}"
         )
 
-        return selected_page['page']
+        return selected_page["page"]
 
     except Exception as e:
         logger.error(
@@ -532,11 +529,12 @@ def _setup_page_logging(page):
 
     Args:
         page: Playwright page オブジェクト
+
     """
     try:
         # コンソールメッセージのリスナーを設定
         page.on(
-            'console',
+            "console",
             lambda msg: broser_console_logger.info(
                 f"console.{msg.type}: {msg.text}"
             ),
@@ -544,7 +542,7 @@ def _setup_page_logging(page):
 
         # エラーイベントもキャプチャ
         page.on(
-            'pageerror',
+            "pageerror",
             lambda error: broser_console_logger.error(f"[PAGE ERROR] {error}"),
         )
 
@@ -568,6 +566,7 @@ def _resize_image_if_needed(
 
     Returns:
         bytes: リサイズされた画像データ
+
     """
     # Base64 エンコード後のサイズを推定
     estimated_base64_size = len(image_bytes) * 1.33
@@ -592,40 +591,40 @@ def _resize_image_if_needed(
 
     # バイトに変換
     output = io.BytesIO()
-    img_resized.save(output, format='PNG', optimize=True)
+    img_resized.save(output, format="PNG", optimize=True)
     return output.getvalue()
 
 
 # _format_ax_node で使用する定数
 _AX_SKIP_ROLES = frozenset(
     {
-        'none',
-        'generic',
-        'linebreak',
-        'inlinetextbox',
+        "none",
+        "generic",
+        "linebreak",
+        "inlinetextbox",
     }
 )
-_AX_TEXT_ROLES = frozenset({'statictext', 'text'})
+_AX_TEXT_ROLES = frozenset({"statictext", "text"})
 _AX_INTERACTIVE_ROLES = frozenset(
     {
-        'button',
-        'link',
-        'textbox',
-        'checkbox',
-        'radio',
-        'combobox',
-        'listbox',
-        'menuitem',
-        'menuitemcheckbox',
-        'menuitemradio',
-        'option',
-        'searchbox',
-        'slider',
-        'spinbutton',
-        'switch',
-        'tab',
-        'treeitem',
-        'scrollbar',
+        "button",
+        "link",
+        "textbox",
+        "checkbox",
+        "radio",
+        "combobox",
+        "listbox",
+        "menuitem",
+        "menuitemcheckbox",
+        "menuitemradio",
+        "option",
+        "searchbox",
+        "slider",
+        "spinbutton",
+        "switch",
+        "tab",
+        "treeitem",
+        "scrollbar",
     }
 )
 
@@ -642,65 +641,66 @@ def _format_ax_node(node, ref_map, counter, indent=0):
 
     Returns:
         list[str]: フォーマット済みの行リスト
+
     """
     lines = []
-    role = node.get('role', '')
-    name = node.get('name', '')
-    value = node.get('value', '')
+    role = node.get("role", "")
+    name = node.get("name", "")
+    value = node.get("value", "")
     role_lower = role.lower()
 
     # 不要なノードをスキップ
     if role_lower in _AX_SKIP_ROLES and not name:
         # 子ノードだけ処理
-        for child in node.get('children', []):
+        for child in node.get("children", []):
             lines.extend(_format_ax_node(child, ref_map, counter, indent))
         return lines
 
     # テキストノードは名前があればインラインで表示
     if role_lower in _AX_TEXT_ROLES:
         if name.strip():
-            prefix = '  ' * indent
+            prefix = "  " * indent
             lines.append(f'{prefix}"{name}"')
         return lines
 
     # ref ID を付与（操作可能な要素のみ）
     ref_id = None
     if role_lower in _AX_INTERACTIVE_ROLES:
-        ref_id = f'@e{counter[0]}'
+        ref_id = f"@e{counter[0]}"
         counter[0] += 1
         ref_map[ref_id] = {
-            'role': role,
-            'name': name,
+            "role": role,
+            "name": name,
         }
 
     # 行を構築
-    prefix = '  ' * indent
+    prefix = "  " * indent
     parts = []
     if ref_id:
-        parts.append(f'[{ref_id} {role}]')
+        parts.append(f"[{ref_id} {role}]")
     else:
-        parts.append(f'[{role}]')
+        parts.append(f"[{role}]")
     if name:
         parts.append(name)
-    if value is not None and value != '':
+    if value is not None and value != "":
         parts.append(f'value="{value}"')
 
     # checked / pressed 状態
-    if node.get('checked') is True:
-        parts.append('(checked)')
-    if node.get('pressed') is True:
-        parts.append('(pressed)')
-    if node.get('disabled') is True:
-        parts.append('(disabled)')
-    if node.get('expanded') is True:
-        parts.append('(expanded)')
-    elif node.get('expanded') is False:
-        parts.append('(collapsed)')
+    if node.get("checked") is True:
+        parts.append("(checked)")
+    if node.get("pressed") is True:
+        parts.append("(pressed)")
+    if node.get("disabled") is True:
+        parts.append("(disabled)")
+    if node.get("expanded") is True:
+        parts.append("(expanded)")
+    elif node.get("expanded") is False:
+        parts.append("(collapsed)")
 
-    lines.append(f'{prefix}{" ".join(parts)}')
+    lines.append(f"{prefix}{' '.join(parts)}")
 
     # 子ノードを再帰処理
-    for child in node.get('children', []):
+    for child in node.get("children", []):
         lines.extend(_format_ax_node(child, ref_map, counter, indent + 1))
 
     return lines
@@ -720,6 +720,7 @@ async def get_accessibility_snapshot(*, url: str | None = None):
             'title': str,
             'ref_map': dict,  # ref ID → ノード情報
         }
+
     """
     logger.info("A11y スナップショット取得開始")
 
@@ -741,17 +742,17 @@ async def get_accessibility_snapshot(*, url: str | None = None):
             if not ax_tree:
                 logger.warning("A11y tree が空です")
                 return {
-                    'snapshot_text': '(empty page)',
-                    'url': current_url,
-                    'title': title,
-                    'ref_map': {},
+                    "snapshot_text": "(empty page)",
+                    "url": current_url,
+                    "title": title,
+                    "ref_map": {},
                 }
 
             # ツリーをテキスト形式に変換
             ref_map = {}
             counter = [1]  # リストで参照渡し
             lines = _format_ax_node(ax_tree, ref_map, counter)
-            snapshot_text = '\n'.join(lines)
+            snapshot_text = "\n".join(lines)
 
             logger.info(
                 f"A11y スナップショット取得完了: {current_url}, "
@@ -759,10 +760,10 @@ async def get_accessibility_snapshot(*, url: str | None = None):
             )
 
             return {
-                'snapshot_text': snapshot_text,
-                'url': current_url,
-                'title': title,
-                'ref_map': ref_map,
+                "snapshot_text": snapshot_text,
+                "url": current_url,
+                "title": title,
+                "ref_map": ref_map,
             }
 
         finally:
@@ -782,6 +783,7 @@ async def get_page_source(*, url: str | None = None):
             'url': str,        # 現在のURL
             'title': str       # ページタイトル
         }
+
     """
     logger.info("ソースコード取得開始")
 
@@ -816,7 +818,7 @@ async def get_page_source(*, url: str | None = None):
         f"ソースコード取得完了: {current_url}, ファイル保存: {file_path}"
     )
 
-    return {'file_path': file_path, 'url': current_url, 'title': title}
+    return {"file_path": file_path, "url": current_url, "title": title}
 
 
 async def get_visible_screenshot(
@@ -842,6 +844,7 @@ async def get_visible_screenshot(
             'title': str          # ページタイトル
             'screenshot': bytes,  # 画像バイナリ (include_image_binary=True の場合のみ)
         }
+
     """
     logger.info(
         f"表示箇所のスクリーンショット取得開始 "
@@ -902,13 +905,13 @@ async def get_visible_screenshot(
     )
 
     result = {
-        'file_path': file_path,
-        'url': current_url,
-        'title': title,
+        "file_path": file_path,
+        "url": current_url,
+        "title": title,
     }
 
     if include_image_binary:
-        result['screenshot'] = screenshot_bytes
+        result["screenshot"] = screenshot_bytes
 
     return result
 
@@ -931,6 +934,7 @@ async def get_full_screenshot(
             'title': str          # ページタイトル
             'screenshot': bytes,  # 画像バイナリ (include_image_binary=True の場合のみ)
         }
+
     """
     logger.info("全領域のスクリーンショット取得開始")
 
@@ -974,13 +978,13 @@ async def get_full_screenshot(
     )
 
     result = {
-        'file_path': file_path,
-        'url': current_url,
-        'title': title,
+        "file_path": file_path,
+        "url": current_url,
+        "title": title,
     }
 
     if include_image_binary:
-        result['screenshot'] = screenshot_bytes
+        result["screenshot"] = screenshot_bytes
 
     return result
 
@@ -991,7 +995,8 @@ async def login_and_screenshot(
     username: str,
     password: str,
     username_selector: str = 'input[name="j_username"]',
-    password_selector: str = 'input[name="j_password"]',
+    # S107: パスワードそのものではなく入力欄の CSS セレクタ
+    password_selector: str = 'input[name="j_password"]',  # noqa: S107
     submit_selector: str = 'button[type="submit"]',
     post_login_wait: float = 3.0,
 ) -> dict:
@@ -1014,6 +1019,7 @@ async def login_and_screenshot(
             'url': str,
             'title': str,
         }
+
     """
     logger.info(f"ログイン＆スクリーンショット開始: {url}")
 
@@ -1057,9 +1063,9 @@ async def login_and_screenshot(
     )
 
     return {
-        'file_path': file_path,
-        'url': current_url,
-        'title': title,
+        "file_path": file_path,
+        "url": current_url,
+        "title": title,
     }
 
 
@@ -1072,6 +1078,7 @@ async def get_current_url():
             'url': str,     # 現在のURL
             'title': str    # ページタイトル
         }
+
     """
     logger.info("現在の URL 取得開始")
 
@@ -1091,7 +1098,7 @@ async def get_current_url():
 
         logger.info(f"現在の URL 取得完了: {current_url}")
 
-        return {'url': current_url, 'title': title}
+        return {"url": current_url, "title": title}
 
     except Exception as e:
         error_msg = f"❌ エラー: URL 取得中に予期しないエラーが発生しました: {e.__class__.__name__}: {e}"
@@ -1099,7 +1106,7 @@ async def get_current_url():
         raise BrowserBotTaskFailedError(error_msg)
 
 
-async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
+async def super_reload(*, url: str | None = None, mode: str = "cdp"):
     """
     現在アクティブなタブでスーパーリロードを実行する
 
@@ -1113,6 +1120,7 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
             'url': str,     # リロード後のURL
             'title': str    # ページタイトル
         }
+
     """
     logger.info("スーパーリロード開始")
 
@@ -1135,10 +1143,10 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
         # Playwright の reload メソッドでキャッシュを無視してリロード
         logger.info(f"スーパーリロード実行中: {current_url}, {mode=}")
 
-        if mode == 'javascript':
+        if mode == "javascript":
             # JavaScript を使ってスーパーリロード
             await _super_reload_with_javascript(page)
-        elif mode == 'keyboard':
+        elif mode == "keyboard":
             # キーボードショートカットを使ってスーパーリロード
             await _super_reload_with_keyboard(page)
         else:
@@ -1158,7 +1166,7 @@ async def super_reload(*, url: str | None = None, mode: str = 'cdp'):
         final_url = page.url
         logger.info(f"スーパーリロード完了: {final_url}")
 
-        return {'url': final_url, 'title': title}
+        return {"url": final_url, "title": title}
 
     except Exception as e:
         error_msg = (
@@ -1178,10 +1186,11 @@ async def _super_reload_with_cdp(page):
 
     Returns:
         None
+
     """
     try:
         cdp_session = await page.context.new_cdp_session(page)
-        await cdp_session.send('Page.reload', {'ignoreCache': True})
+        await cdp_session.send("Page.reload", {"ignoreCache": True})
         logger.info("CDP を使用してスーパーリロードを実行しました")
     except Exception as e:
         logger.error(f"CDP リロードエラー: {e.__class__.__name__}: {e}")
@@ -1197,22 +1206,23 @@ async def _super_reload_with_keyboard(page):
 
     Returns:
         None
+
     """
     try:
         import platform
 
-        if platform.system() == 'Darwin':  # macOS
-            await page.keyboard.down('Meta')
-            await page.keyboard.down('Shift')
-            await page.keyboard.press('R')
-            await page.keyboard.up('Shift')
-            await page.keyboard.up('Meta')
+        if platform.system() == "Darwin":  # macOS
+            await page.keyboard.down("Meta")
+            await page.keyboard.down("Shift")
+            await page.keyboard.press("R")
+            await page.keyboard.up("Shift")
+            await page.keyboard.up("Meta")
         else:  # Windows/Linux
-            await page.keyboard.down('Control')
-            await page.keyboard.down('Shift')
-            await page.keyboard.press('R')
-            await page.keyboard.up('Shift')
-            await page.keyboard.up('Control')
+            await page.keyboard.down("Control")
+            await page.keyboard.down("Shift")
+            await page.keyboard.press("R")
+            await page.keyboard.up("Shift")
+            await page.keyboard.up("Control")
 
         logger.info("キーボードショートカットでスーパーリロードを実行しました")
     except Exception as e:
@@ -1233,6 +1243,7 @@ async def _super_reload_with_javascript(page):
 
     Returns:
         None
+
     """
     try:
         await page.evaluate(
@@ -1268,6 +1279,7 @@ async def run_script(*, script: str, url: str | None = None):
 
     Returns:
         JavaScript の実行結果
+
     """
     if not script:
         logger.error(
@@ -1318,7 +1330,7 @@ async def run_script(*, script: str, url: str | None = None):
 
 
 async def run_python_script(
-    *, python_script_text: str = None, url: str | None = None
+    *, python_script_text: str | None = None, url: str | None = None
 ):
     """
     Playwright 用の Python スクリプトを実行する。
@@ -1332,6 +1344,7 @@ async def run_python_script(
 
     Returns:
         return の実行結果
+
     """
     if not python_script_text:
         logger.error(
@@ -1353,20 +1366,22 @@ async def run_python_script(
     await _page_wait_for_load_state(page)
 
     # page オブジェクトを利用可能にして Python スクリプトを実行
-    local_vars = {'page': page, 'asyncio': asyncio}
-    global_vars = {'page': page, 'asyncio': asyncio}
+    local_vars = {"page": page, "asyncio": asyncio}
+    global_vars = {"page": page, "asyncio": asyncio}
     try:
         # async 関数として実行するためにラップ
         wrapped_script = f"""
 async def user_script():
-{chr(10).join('    ' + line for line in python_script_text.strip().split(chr(10)))}
+{chr(10).join("    " + line for line in python_script_text.strip().split(chr(10)))}
 """
-        logger.debug('wrapped_script: %s', wrapped_script)
+        logger.debug("wrapped_script: %s", wrapped_script)
         # 関数を定義
-        compiled_code = compile(wrapped_script, '<string>', 'exec')
-        exec(compiled_code, global_vars, local_vars)
+        compiled_code = compile(wrapped_script, "<string>", "exec")
+        # S102: 利用者が渡した Playwright スクリプトを実行するのが
+        # このツールの機能そのもの (MCP クライアントは信頼済みの前提)。
+        exec(compiled_code, global_vars, local_vars)  # noqa: S102
         # 定義した関数を実行
-        result = await local_vars['user_script']()
+        result = await local_vars["user_script"]()
         logger.info(
             f"カスタム Python スクリプトの実行が完了しました: {result=}"
         )
@@ -1392,6 +1407,7 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
             'message': str,
             'browser_info': str | None,
         }
+
     """
     import platform
     import socket
@@ -1406,20 +1422,20 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
 
     if BROWSER_BOT_USE_REMOTE:
         return {
-            'status': 'already_running',
-            'message': (
+            "status": "already_running",
+            "message": (
                 f"リモートブラウザを使用中です ({SELENIUM_REMOTE_URL})"
             ),
-            'browser_info': None,
+            "browser_info": None,
         }
 
     # ポートが使用中かチェック
     def is_port_in_use(port: int) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(('', port))
+                s.bind(("", port))
                 return False
-            except socket.error:
+            except OSError:
                 return True
 
     if is_port_in_use(chrome_debug_port):
@@ -1430,24 +1446,23 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
                 )
                 if response.status_code == 200:
                     version_info = response.json()
-                    browser_info = version_info.get('Browser', 'Unknown')
+                    browser_info = version_info.get("Browser", "Unknown")
                     return {
-                        'status': 'already_running',
-                        'message': (
-                            f"Chrome は既に起動しています "
-                            f"({CHROME_DEBUG_URL})"
+                        "status": "already_running",
+                        "message": (
+                            f"Chrome は既に起動しています ({CHROME_DEBUG_URL})"
                         ),
-                        'browser_info': browser_info,
+                        "browser_info": browser_info,
                     }
         except Exception as e:
             return {
-                'status': 'error',
-                'message': (
+                "status": "error",
+                "message": (
                     f"ポート {chrome_debug_port} は使用中ですが、"
                     f"Chrome ではない可能性があります "
                     f"({e.__class__.__name__}: {e})"
                 ),
-                'browser_info': None,
+                "browser_info": None,
             }
 
     # Chrome の実行パスを取得
@@ -1456,9 +1471,11 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
 
     if system == "Darwin":
         chrome_paths = [
-            "/Applications/Google Chrome.app/Contents/MacOS/" "Google Chrome",
-            "/Applications/Google Chrome Canary.app/Contents/MacOS/"
-            "Google Chrome Canary",
+            ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            (
+                "/Applications/Google Chrome Canary.app/Contents/MacOS/"
+                "Google Chrome Canary"
+            ),
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
         ]
     elif system == "Linux":
@@ -1472,7 +1489,10 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
     elif system == "Windows":
         chrome_paths = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application" r"\chrome.exe",
+            (
+                r"C:\Program Files (x86)\Google\Chrome\Application"
+                r"\chrome.exe"
+            ),
         ]
 
     chrome_executable = None
@@ -1483,9 +1503,9 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
 
     if not chrome_executable:
         return {
-            'status': 'error',
-            'message': "Chrome が見つかりません",
-            'browser_info': None,
+            "status": "error",
+            "message": "Chrome が見つかりません",
+            "browser_info": None,
         }
 
     mode_text = "ゲストモード" if as_guest else "通常モード"
@@ -1510,7 +1530,9 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
         chrome_args.append(f"--user-data-dir={user_data_dir}")
 
     try:
-        subprocess.Popen(
+        # S603: chrome_args は定数と実行環境のパスから組み立てており、
+        # 利用者入力を含まない。shell も介さない。
+        subprocess.Popen(  # noqa: S603
             chrome_args,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -1524,39 +1546,41 @@ async def launch_chrome(*, as_guest: bool = True) -> dict:
                 )
                 if response.status_code == 200:
                     version_info = response.json()
-                    browser_info = version_info.get('Browser', 'Unknown')
+                    browser_info = version_info.get("Browser", "Unknown")
                     return {
-                        'status': 'launched',
-                        'message': (
+                        "status": "launched",
+                        "message": (
                             f"Chrome を{mode_text}で起動しました "
                             f"(ポート {chrome_debug_port})"
                         ),
-                        'browser_info': browser_info,
+                        "browser_info": browser_info,
                     }
-        except Exception:
+        # S110: 起動確認は best-effort。失敗しても Chrome の起動自体は
+        # 済んでいるので、下の「起動確認はできませんでした」を返して続行する。
+        except Exception:  # noqa: S110
             pass
 
         return {
-            'status': 'launched',
-            'message': (
+            "status": "launched",
+            "message": (
                 f"Chrome を{mode_text}で起動しました "
                 f"(ポート {chrome_debug_port})。"
                 "起動確認はできませんでした。"
             ),
-            'browser_info': None,
+            "browser_info": None,
         }
 
     except Exception as e:
         return {
-            'status': 'error',
-            'message': (
-                f"Chrome の起動に失敗しました: " f"{e.__class__.__name__}: {e}"
+            "status": "error",
+            "message": (
+                f"Chrome の起動に失敗しました: {e.__class__.__name__}: {e}"
             ),
-            'browser_info': None,
+            "browser_info": None,
         }
 
 
-epilog = '''
+epilog = """
 # Using javascript script example
 [tests/test-script.sh]
 
@@ -1590,9 +1614,9 @@ await asyncio.sleep(2)
 return f'完了しました。 URL: {page.url}'
 " | .venv/bin/python browser_bot.py --python-script --url https://www.mangazenkan.com
 ```
-'''
+"""
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     dotenv.load_dotenv()
 
     parser = argparse.ArgumentParser(
@@ -1601,24 +1625,24 @@ if __name__ == '__main__':
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        '--max-steps',
+        "--max-steps",
         type=int,
-        help='Maximum number of steps for the agent to run.',
+        help="Maximum number of steps for the agent to run.",
     )
     parser.add_argument(
-        '--script',
-        action='store_true',
-        help='Execute input as JavaScript instead of Playwright task.',
+        "--script",
+        action="store_true",
+        help="Execute input as JavaScript instead of Playwright task.",
     )
     parser.add_argument(
-        '--python-script',
-        action='store_true',
-        help='Execute input as Python script instead of Playwright task.',
+        "--python-script",
+        action="store_true",
+        help="Execute input as Python script instead of Playwright task.",
     )
     parser.add_argument(
-        '--url',
+        "--url",
         type=str,
-        help='URL to navigate to before executing the task or script.',
+        help="URL to navigate to before executing the task or script.",
     )
     args = parser.parse_args()
 
@@ -1691,14 +1715,14 @@ async def request(
     await _check_chrome_running()
 
     method = method.lower()
-    if not method in {
-        'get',
-        'post',
-        'put',
-        'delete',
-        'patch',
-        'head',
-        'options',
+    if method not in {
+        "get",
+        "post",
+        "put",
+        "delete",
+        "patch",
+        "head",
+        "options",
     }:
         error_msg = (
             f"❌ エラー: サポートされていない HTTP メソッドです: {method}"
@@ -1723,9 +1747,9 @@ async def request(
 
     # レスポンスデータを辞書として返す
     return {
-        'status': response_status,
-        'headers': response_headers,
-        'body': response_body,
+        "status": response_status,
+        "headers": response_headers,
+        "body": response_body,
     }
 
 
@@ -1733,7 +1757,7 @@ async def run_lighthouse(
     *,
     url: str | None = None,
     categories: list[str] | None = None,
-    device: str = 'desktop',
+    device: str = "desktop",
     timeout_seconds: int = 120,
 ):
     """
@@ -1755,11 +1779,12 @@ async def run_lighthouse(
             'report_path': str,   # HTML レポートのファイルパス
             'json_path': str,     # JSON レポートのファイルパス
         }
+
     """
     logger.info("Lighthouse 監査開始")
 
     # npx が使用可能か確認
-    npx_path = shutil.which('npx')
+    npx_path = shutil.which("npx")
     if not npx_path:
         error_msg = (
             "❌ エラー: npx コマンドが見つかりません。"
@@ -1780,15 +1805,15 @@ async def run_lighthouse(
 
     # カテゴリのデフォルト値
     if not categories:
-        categories = ['performance']
+        categories = ["performance"]
 
     # 有効なカテゴリを検証
     valid_categories = {
-        'performance',
-        'accessibility',
-        'best-practices',
-        'seo',
-        'pwa',
+        "performance",
+        "accessibility",
+        "best-practices",
+        "seo",
+        "pwa",
     }
     invalid_categories = set(categories) - valid_categories
     if invalid_categories:
@@ -1800,7 +1825,7 @@ async def run_lighthouse(
         raise BrowserBotTaskAbortedError(error_msg)
 
     # デバイスの検証
-    valid_devices = {'desktop', 'mobile'}
+    valid_devices = {"desktop", "mobile"}
     if device not in valid_devices:
         error_msg = (
             f"❌ エラー: 無効なデバイス: {device}。"
@@ -1817,27 +1842,27 @@ async def run_lighthouse(
     html_path = os.path.join(downloads_dir, f"{base_filename}.html")
 
     # Chrome のデバッグポートを取得
-    chrome_port = CHROME_DEBUG_URL.split(':')[-1]
+    chrome_port = CHROME_DEBUG_URL.split(":")[-1]
 
     # Lighthouse コマンドを構築
     cmd = [
         npx_path,
-        'lighthouse',
+        "lighthouse",
         url,
-        f'--port={chrome_port}',
-        '--output=json,html',
-        f'--output-path={os.path.join(downloads_dir, base_filename)}',
-        f'--only-categories={",".join(categories)}',
-        '--quiet',
-        '--chrome-flags=--ignore-certificate-errors',
+        f"--port={chrome_port}",
+        "--output=json,html",
+        f"--output-path={os.path.join(downloads_dir, base_filename)}",
+        f"--only-categories={','.join(categories)}",
+        "--quiet",
+        "--chrome-flags=--ignore-certificate-errors",
     ]
 
     # デバイス設定
-    if device == 'mobile':
-        cmd.append('--emulated-form-factor=mobile')
+    if device == "mobile":
+        cmd.append("--emulated-form-factor=mobile")
     else:
-        cmd.append('--emulated-form-factor=desktop')
-        cmd.append('--preset=desktop')
+        cmd.append("--emulated-form-factor=desktop")
+        cmd.append("--preset=desktop")
 
     logger.info(f"Lighthouse コマンド実行: {' '.join(cmd)}")
 
@@ -1860,44 +1885,44 @@ async def run_lighthouse(
             raise BrowserBotTaskFailedError(error_msg)
 
         # JSON レポートを読み込んでスコアとメトリクスを抽出
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(json_path, encoding="utf-8") as f:
             report = json.load(f)
 
         # カテゴリ別スコアを抽出
         scores = {}
-        for cat_id, cat_data in report.get('categories', {}).items():
-            scores[cat_id] = round(cat_data.get('score', 0) * 100)
+        for cat_id, cat_data in report.get("categories", {}).items():
+            scores[cat_id] = round(cat_data.get("score", 0) * 100)
 
         # 主要メトリクスを抽出
-        audits = report.get('audits', {})
+        audits = report.get("audits", {})
         metrics = {}
 
         # Performance メトリクス
         metric_keys = {
-            'first-contentful-paint': 'FCP',
-            'largest-contentful-paint': 'LCP',
-            'total-blocking-time': 'TBT',
-            'cumulative-layout-shift': 'CLS',
-            'speed-index': 'SI',
-            'interactive': 'TTI',
+            "first-contentful-paint": "FCP",
+            "largest-contentful-paint": "LCP",
+            "total-blocking-time": "TBT",
+            "cumulative-layout-shift": "CLS",
+            "speed-index": "SI",
+            "interactive": "TTI",
         }
         for audit_key, metric_name in metric_keys.items():
             if audit_key in audits:
                 audit = audits[audit_key]
                 metrics[metric_name] = {
-                    'value': audit.get('numericValue'),
-                    'display': audit.get('displayValue'),
-                    'score': round((audit.get('score') or 0) * 100),
+                    "value": audit.get("numericValue"),
+                    "display": audit.get("displayValue"),
+                    "score": round((audit.get("score") or 0) * 100),
                 }
 
         logger.info(f"Lighthouse 監査完了: {url}, スコア: {scores}")
 
         return {
-            'url': url,
-            'scores': scores,
-            'metrics': metrics,
-            'report_path': html_path,
-            'json_path': json_path,
+            "url": url,
+            "scores": scores,
+            "metrics": metrics,
+            "report_path": html_path,
+            "json_path": json_path,
         }
 
     except subprocess.TimeoutExpired:

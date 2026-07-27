@@ -1,7 +1,5 @@
 """Selenium Grid との接続を管理するモジュール。"""
 
-import urllib.parse
-
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
@@ -9,7 +7,8 @@ from logging_config import logger
 
 
 async def get_cdp_url_from_selenium_grid(selenium_grid_url: str) -> str:
-    """Selenium Grid から WebDriver セッションを作成し、CDP URL を取得する。
+    """
+    Selenium Grid から WebDriver セッションを作成し、CDP URL を取得する。
 
     Selenium Grid は WebDriver プロトコルを使用するが、browser_use は CDP を期待する。
     この関数は Selenium Grid から WebDriver セッションを作成し、
@@ -24,6 +23,7 @@ async def get_cdp_url_from_selenium_grid(selenium_grid_url: str) -> str:
 
     Raises:
         Exception: CDP URL の取得に失敗した場合
+
     """
     logger.info(f"Selenium Grid から CDP URL を取得中: {selenium_grid_url}")
 

@@ -21,3 +21,153 @@ test = []
 selenium-remote = [
     "selenium>=4.27.1",
 ]
+
+[dependency-groups]
+# .pre-commit-config.yaml の ruff-pre-commit と同じ系列のバージョンを使う
+dev = [
+    "ruff>=0.16.0,<0.17",
+]
+
+[tool.ruff]
+target-version = 'py312'
+# 旧 black の --line-length 79 を踏襲する
+line-length = 79
+exclude = [
+    '.venv',
+    # ruff 0.16 以降は Markdown 中の Python コードブロックも整形対象にするが、
+    # 本タスクは Python コードの移行が目的なのでドキュメントは対象外にする
+    '*.md',
+]
+# pre-commit はファイルパスを明示的に渡すため、これが無いと exclude が無視される
+force-exclude = true
+
+[tool.ruff.lint]
+select = ['ALL']
+ignore = [
+    # ruff format と競合するため公式が ignore を推奨しているルール
+    # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    'W191', # tab-indentation
+    'E111', # indentation-with-invalid-multiple
+    'E114', # indentation-with-invalid-multiple-comment
+    'E117', # over-indented
+    'D206', # docstring-tab-indentation
+    'D300', # triple-single-quotes
+    'Q000', # bad-quotes-inline-string
+    'Q001', # bad-quotes-multiline-string
+    'Q002', # bad-quotes-docstring
+    'Q003', # avoidable-escaped-quote
+    'COM812', # missing-trailing-comma
+    'COM819', # prohibited-trailing-comma
+    'ISC001', # single-line-implicit-string-concatenation
+    'ISC002', # multi-line-implicit-string-concatenation
+
+    # ANN: 型アノテーション
+    'ANN', # 引数・戻り値の型アノテーションがない (ANN001-ANN401)。段階導入方針のため除外
+
+    # ARG: 未使用引数
+    'ARG001', # 未使用関数引数。argparse のサブコマンドハンドラ等シグネチャ固定の箇所で必要
+
+    # ASYNC: 非同期関数内のブロッキング呼び出し
+    'ASYNC109', # async 関数の timeout 引数
+    'ASYNC220', # async 内での subprocess 生成 (Chrome の起動に必要)
+    'ASYNC230', # async 内の同期 open() (スクリーンショットの保存等)
+    'ASYNC240', # async 内の os.path 呼び出し。trio / anyio 前提のルールで、
+    # このプロジェクトは asyncio 上で playwright を使うため該当しない
+
+    # B: bugbear
+    'B904', # except 節での raise ... from の省略。ruff では 17 箇所該当する
+    # (旧 flake8 の --select E9,F63,F7,F82,B,B950 では実際には報告されていなかった)。
+    # 一括変更は移行の範囲を超えるため除外し、別課題で対応する
+
+    # BLE: broad except
+    'BLE001', # except Exception の検出。ブラウザ操作の失敗をツールの戻り値として
+    # 返すため意図的に使用
+
+    # C901 / PLR: 複雑度・引数の数
+    'C901', # 関数の循環的複雑度が高い (デフォルト閾値: 10)
+    'PLR0911', # 関数の return 文が多すぎる
+    'PLR0912', # 関数の分岐が多すぎる
+    'PLR0913', # 関数の引数が多すぎる
+    'PLR0915', # 関数の文が多すぎる
+    'PLR2004', # マジックナンバー比較。定数化のコストに対して効果が薄い
+
+    # CPY: 著作権表示
+    'CPY001', # ファイル先頭の著作権表示がない。LICENSE で示すため不要
+
+    # D: docstring
+    'D203', # クラス定義の前に 1 行空行。D211 (空行なし) と排他のため除外
+    'D100', # モジュールレベルの docstring がない
+    'D101', # public クラスに docstring がない
+    'D102', # public メソッドに docstring がない
+    'D103', # public 関数に docstring がない
+    'D104', # __init__.py に docstring がない
+    'D105', # __str__ 等 magic メソッドに docstring がない
+    'D107', # __init__ に docstring がない
+    'D200', # 1 行で書ける docstring を複数行で書いている
+    'D205', # docstring のサマリ行の後に空行がない。日本語の複数行 docstring が多いため除外
+    'D212', # docstring サマリを 1 行目に置く形式。D213 (2 行目) を採用するため除外
+    'D400', # docstring がピリオドで終わっていない
+    'D401', # docstring の先頭が命令形でない
+    'D415', # docstring の終端が . ? ! でない
+    'D417', # docstring に未記載の引数がある
+
+    # DTZ: datetime timezone
+    'DTZ005', # datetime.now() にタイムゾーン指定がない
+
+    # EM: 例外メッセージのリテラル化
+    'EM101', # raise SomeError("リテラル") でメッセージを変数に切り出すことを促す
+    'EM102', # raise SomeError(f"...") で f-string を変数に切り出すことを促す
+
+    # ERA: コメントアウトコード
+    'ERA001', # コメントアウトされたコードの検出。日本語コメント等での誤検知が多い
+
+    # EXE: 実行権限
+    'EXE001', # shebang があるのに実行権限がない。起動は launch-mcp-server.sh 経由なので
+    # shebang はインタプリタを示す記述として残しているだけ
+
+    # FBT: bool 位置引数
+    'FBT002', # 関数定義の位置引数に bool のデフォルト値がある
+    'FBT003', # 呼び出し側で位置引数に True/False を直接渡している
+
+    # PLC / PLW: pylint
+    'PLC0415', # 関数内 import の検出。起動時間の短縮と循環 import 回避のため意図的に遅延
+    'PLW0603', # global 文による書き換え (ブラウザインスタンスのモジュール状態として意図的)
+
+    # PTH: pathlib への書き換え
+    'PTH', # os.path 系 API の pathlib 化提案。既存の os.path スタイルを維持
+
+    # RUF: Ruff 固有
+    'RUF001', # 文字列中に全角スペース・類似 Unicode 文字。日本語プロジェクトの仕様として許容
+    'RUF002', # docstring 中に全角スペース・類似 Unicode 文字。同上
+    'RUF003', # コメント内の全角スペース等 Unicode 文字。同上
+    'RUF059', # 未使用のアンパック変数 (browser, page = ... の browser)。
+    # 既存 9 箇所のリネームは移行の範囲を超えるため除外
+
+    # S: セキュリティ (bandit)
+    'S108', # /tmp 固定パスの使用。ログの出力先として CLAUDE.md に記載済み
+
+    # SIM: 簡略化提案 (可読性は主観的なため既存スタイルを維持)
+    'SIM212', # 条件式の反転提案
+
+    # T: print
+    'T201', # print() の使用。CLI (browser_bot_cli.py) の出力に必要
+
+    # TRY: 例外処理
+    'TRY003', # 例外クラス外で長いメッセージを定義することを促す。コストに対して効果が薄い
+    'TRY300', # try 末尾の return を else に移すことを促す。既存スタイルを維持
+    'TRY301', # try 内の raise を内部関数へ切り出すことを促す。既存スタイルを維持
+]
+
+[tool.ruff.lint.pycodestyle]
+# ruff format が 79 桁でコードを整形するが、URL や日本語のメッセージのような
+# 分割できない文字列リテラル・コメントは折り返されない。
+# 旧 flake8 の B950 と同じ趣旨で、format の幅より緩い上限を lint 側の歯止めとして
+# 持たせる。ただし旧 B950 の実効上限 (79 + 10% = 約 87) よりは意図的に緩くしてある。
+# ruff は全角文字を幅 2 で数えるため、日本語のメッセージが 87 を容易に超えるが、
+# 機械的に折り返せないため。
+max-line-length = 110
+
+[tool.ruff.format]
+# 旧 black は --skip-string-normalization で既存のクォートを維持していた。
+# このリポジトリはダブルクォートがやや多数派 (696 対 564) なので double に揃える
+quote-style = 'double'

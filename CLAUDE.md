@@ -62,8 +62,8 @@ Browser Bot は Chrome ブラウザの自動操作を行う MCP (Model Context P
 
 ### 1. コードスタイル
 
-- **flake8** 準拠（最大行長: 79文字）
-- **black** フォーマッター使用
+- **ruff** で lint とフォーマットを行う（最大行長: 79文字）
+- ルール設定は `pyproject.toml` の `[tool.ruff]` を参照
 - 型ヒント必須（typing, Annotated, Pydantic Field）
 
 ### 2. ファイル構成
@@ -244,9 +244,9 @@ pkill -f chrome
 # 依存関係の更新
 uv sync
 
-# リンター実行（pre-commit があれば）
-# python -m flake8 *.py
-# python -m black *.py
+# lint とフォーマット
+uv run ruff check --fix .
+uv run ruff format .
 
 # テスト実行
 ./tests/test-mcp-initialize.sh
