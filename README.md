@@ -34,7 +34,7 @@ Create a `.env` file with the following settings:
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
-# Default model is gpt-5-mini
+# Default model is gpt-5.6-luna
 # Set BROWSER_USE_LLM_MODEL to use a different model
 # BROWSER_USE_LLM_MODEL=gpt-4o
 ```
