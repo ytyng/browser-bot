@@ -213,7 +213,7 @@ def get_llm():
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
-        model=_llm_model_name or "gpt-5-mini",
+        model=_llm_model_name or "gpt-5.6-luna",
     )
 
 
