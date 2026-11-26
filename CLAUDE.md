@@ -1,75 +1,75 @@
-# Browser Bot - Claude Code 開発ガイド
+# Browser Bot - Claude Code Development Guide
 
-このドキュメントは、Browser Bot プロジェクトを Claude Code で開発・メンテナンスする際のガイドです。
+This document is a guide for developing and maintaining the Browser Bot project with Claude Code.
 
-## プロジェクト概要
+## Project Overview
 
-Browser Bot は Chrome ブラウザの自動操作を行う MCP (Model Context Protocol) サーバーです。browser_use ライブラリを使用して、自然言語による指示でブラウザ操作を実行できます。
+Browser Bot is an MCP (Model Context Protocol) server that automates the Chrome browser. Using the browser_use library, it can perform browser operations from natural-language instructions.
 
-### 主な機能
+### Main features
 
-- **ブラウザ自動操作**: 自然言語による指示でブラウザ操作を実行
-- **スクリーンショット取得**: 表示領域または全領域のスクリーンショット
-- **ソースコード取得**: 現在表示されているページの HTML ソース
-- **複数 LLM 対応**: OpenAI GPT および Google Gemini をサポート
+- **Browser automation**: Perform browser operations from natural-language instructions
+- **Screenshots**: Screenshots of the visible area or the full page
+- **Source retrieval**: The HTML source of the currently displayed page
+- **Multiple LLMs**: Supports OpenAI GPT and Google Gemini
 
-## アーキテクチャ
+## Architecture
 
-### コアコンポーネント
+### Core components
 
-- **browser_bot.py**: メインの操作実行エンジン
-- **mcp_server.py**: MCP プロトコル実装とツール定義
-- **launch-mcp-server.sh**: MCP サーバー起動スクリプト
-- **launch-chrome.sh**: Chrome 起動スクリプト
+- **browser_bot.py**: The main operation execution engine
+- **mcp_server.py**: MCP protocol implementation and tool definitions
+- **launch-mcp-server.sh**: MCP server launch script
+- **launch-chrome.sh**: Chrome launch script
 
-### 依存関係
+### Dependencies
 
-- **browser_use**: ブラウザ自動操作ライブラリ
-- **fastmcp**: MCP サーバー実装フレームワーク
-- **langchain_openai**: OpenAI LLM 統合
-- **langchain_google_genai**: Google Gemini LLM 統合
-- **playwright**: ブラウザ制御
-- **httpx**: HTTP クライアント
-- **pillow**: 画像処理
-- **pydantic**: データバリデーション
+- **browser_use**: Browser automation library
+- **fastmcp**: MCP server implementation framework
+- **langchain_openai**: OpenAI LLM integration
+- **langchain_google_genai**: Google Gemini LLM integration
+- **playwright**: Browser control
+- **httpx**: HTTP client
+- **pillow**: Image processing
+- **pydantic**: Data validation
 
-## 開発時の重要なポイント
+## Key Points for Development
 
-### 1. ログ設定
+### 1. Logging
 
-- すべてのログは `/tmp/browser-bot.log` に記録
-- MCP サーバーでは stdout にログを出力しない（stdio 通信を妨げるため）
-- ログレベルは環境変数 `BROWSER_USE_LOGGING_LEVEL=result` で制御
+- All logs are written to `/tmp/browser-bot.log`
+- The MCP server does not write logs to stdout (it would interfere with stdio communication)
+- The log level is controlled with the environment variable `BROWSER_USE_LOGGING_LEVEL=result`
 
-### 2. エラーハンドリング
+### 2. Error handling
 
-- Chrome 接続エラーの適切な処理
-- タスク実行エラーの詳細なログ記録
-- ユーザーフレンドリーなエラーメッセージ
+- Proper handling of Chrome connection errors
+- Detailed logging of task execution errors
+- User-friendly error messages
 
-### 3. MCP プロトコル対応
+### 3. MCP protocol support
 
-- 初期化シーケンス: `initialize` → `notifications/initialized` → `tools/list`
-- Pydantic Field を使った詳細なパラメーター説明
-- JSON Schema による入力バリデーション
-- 4つの MCP ツール実装:
-  - `browser_use_local_chrome_9222`: ブラウザ自動操作
-  - `get_page_source`: HTML ソースコード取得
-  - `get_visible_screenshot`: 表示箇所のスクリーンショット
-  - `get_full_screenshot`: 全領域のスクリーンショット
+- Initialization sequence: `initialize` → `notifications/initialized` → `tools/list`
+- Detailed parameter descriptions using Pydantic Field
+- Input validation with JSON Schema
+- Implements 4 MCP tools:
+  - `browser_use_local_chrome_9222`: Browser automation
+  - `get_page_source`: Get the HTML source
+  - `get_visible_screenshot`: Screenshot of the visible area
+  - `get_full_screenshot`: Screenshot of the full page
 
-## コーディング規約
+## Coding Conventions
 
-### 1. コードスタイル
+### 1. Code style
 
-- **ruff** で lint とフォーマットを行う（最大行長: 79文字）
-- ルール設定は `pyproject.toml` の `[tool.ruff]` を参照
-- 型ヒント必須（typing, Annotated, Pydantic Field）
+- Lint and format with **ruff** (maximum line length: 79 characters)
+- See `[tool.ruff]` in `pyproject.toml` for the rule settings
+- Type hints are required (typing, Annotated, Pydantic Field)
 
-### 2. ファイル構成
+### 2. File layout
 
 ```python
-# インポート順序
+# Import order
 import os
 import sys
 from typing import Annotated
@@ -81,233 +81,233 @@ import fastmcp
 from browser_bot import run_task, logger
 ```
 
-### 3. 関数設計
+### 3. Function design
 
-- キーワード引数のみ使用（`*` パラメーター）
-- async/await の適切な使用
-- 詳細なドキュメンテーション
+- Use keyword-only arguments (the `*` parameter)
+- Proper use of async/await
+- Detailed documentation
 
-## テスト手順
+## Testing Procedure
 
-### 1. 開発環境セットアップ
+### 1. Development environment setup
 
 ```bash
-# 依存関係のインストール
+# Install dependencies
 uv sync
 
-# Chrome の起動
+# Launch Chrome
 ./launch-chrome.sh
 
-# 環境変数の確認
-cat .env  # OPENAI_API_KEY または GOOGLE_API_KEY が設定されていること
+# Check environment variables
+cat .env  # OPENAI_API_KEY or GOOGLE_API_KEY must be set
 ```
 
-### 2. テスト実行
+### 2. Running tests
 
 ```bash
-# 初期化テスト
+# Initialization test
 ./tests/test-mcp-initialize.sh
 
-# ツール一覧テスト
+# Tool list test
 ./tests/test-mcp-tools-list.sh
 
-# 直接実行テスト
+# Direct execution test
 ./tests/test-run.sh
 
-# パス経由実行テスト
+# Execution-via-path test
 ./tests/test-run-with-path.sh
 ```
 
-### 3. MCP サーバーテスト
+### 3. MCP server test
 
 ```bash
-# サーバー起動
+# Start the server
 ./launch-mcp-server.sh
 
-# 別ターミナルでクライアントテスト
+# Client test in another terminal
 ./tests/test-mcp-tools-list.sh
 ```
 
-## デバッグ方法
+## Debugging
 
-### 1. ログ確認
+### 1. Checking logs
 
 ```bash
-# リアルタイムログ監視
+# Watch the log in real time
 tail -f /tmp/browser-bot.log
 ```
 
-### 2. Chrome デバッグ
+### 2. Chrome debugging
 
 ```bash
-# Chrome の状態確認
+# Check Chrome's status
 curl http://localhost:9222/json/version
 
-# アクティブなタブ一覧
+# List active tabs
 curl http://localhost:9222/json
 ```
 
-### 3. MCP プロトコルデバッグ
+### 3. MCP protocol debugging
 
 ```bash
-# JSON-RPC メッセージの確認
+# Inspect JSON-RPC messages
 echo '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {...}}' | ./launch.sh
 ```
 
-## よくある問題と解決方法
+## Common Problems and Solutions
 
-### 1. Chrome 接続エラー
+### 1. Chrome connection error
 
-**問題**: `Chrome が :9222 で起動していません`
+**Problem**: `Chrome が :9222 で起動していません` (the app's Japanese error message: "Chrome is not running on :9222")
 
-**解決**:
+**Solution**:
 ```bash
-# 既存 Chrome を終了
+# Quit the existing Chrome
 pkill -f chrome
-# デバッグポート付きで再起動
+# Restart it with the debugging port
 ./launch-chrome.sh
 ```
 
-### 2. MCP サーバーエラー
+### 2. MCP server error
 
-**問題**: `Invalid request parameters`
+**Problem**: `Invalid request parameters`
 
-**解決**:
-- `initialize` → `notifications/initialized` の順序を確認
-- JSON-RPC メッセージの形式を確認
+**Solution**:
+- Check the order `initialize` → `notifications/initialized`
+- Check the format of the JSON-RPC messages
 
-### 3. LLM 接続エラー
+### 3. LLM connection error
 
-**問題**: OpenAI または Google API 接続エラー
+**Problem**: OpenAI or Google API connection error
 
-**解決**:
-- `.env` ファイルで API キーを確認
-- モデル名が正しいか確認（例: `gemini-2.5-flash`）
-- 使用量制限に達していないか確認
+**Solution**:
+- Check the API key in the `.env` file
+- Check that the model name is correct (e.g. `gemini-2.5-flash`)
+- Check that you have not hit a usage limit
 
-### 4. タスク実行失敗
+### 4. Task execution failure
 
-**問題**: `max_steps` 制限でタスクが途中終了
+**Problem**: The task ends partway because of the `max_steps` limit
 
-**解決**:
-- `max_steps` パラメーターを増加
-- タスク内容をより具体的に記述
+**Solution**:
+- Increase the `max_steps` parameter
+- Describe the task more specifically
 
-## パフォーマンス最適化
+## Performance Optimization
 
-### 1. ステップ数調整
+### 1. Adjusting the number of steps
 
-- 簡単な操作: 3-5ステップ
-- 中程度の操作: 5-10ステップ
-- 複雑な操作: 10-15ステップ
+- Simple operations: 3-5 steps
+- Moderate operations: 5-10 steps
+- Complex operations: 10-15 steps
 
-### 2. ログレベル調整
-
-```python
-# 開発時: DEBUG
-# 本番: INFO または WARNING
-```
-
-### 3. タイムアウト設定
+### 2. Adjusting the log level
 
 ```python
-# Chrome 接続タイムアウト: 5秒
-# エージェント実行: max_steps に依存
+# Development: DEBUG
+# Production: INFO or WARNING
 ```
 
-## 拡張ポイント
+### 3. Timeout settings
 
-### 1. 新機能追加
+```python
+# Chrome connection timeout: 5 seconds
+# Agent execution: depends on max_steps
+```
 
-- `mcp_server.py` に新しいツール定義
-- `browser_bot.py` に実装ロジック追加
-- テストスクリプトの作成
-- 必要に応じて新しい依存関係を `pyproject.toml` に追加
+## Extension Points
 
-### 2. エラーハンドリング強化
+### 1. Adding new features
 
-- より詳細なエラー分類
-- リトライ機能の実装
-- エラー回復処理
+- Define the new tool in `mcp_server.py`
+- Add the implementation logic to `browser_bot.py`
+- Create a test script
+- Add new dependencies to `pyproject.toml` as needed
 
-### 3. パフォーマンス改善
+### 2. Stronger error handling
 
-- 並列実行サポート
-- キャッシュ機能
-- ブラウザプール管理
+- More detailed error classification
+- Implement retries
+- Error recovery
 
-## リリース手順
+### 3. Performance improvements
 
-### 1. コード品質チェック
+- Parallel execution support
+- Caching
+- Browser pool management
+
+## Release Procedure
+
+### 1. Code quality checks
 
 ```bash
-# 依存関係の更新
+# Update dependencies
 uv sync
 
-# lint とフォーマット
+# Lint and format
 uv run ruff check --fix .
 uv run ruff format .
 
-# テスト実行
+# Run tests
 ./tests/test-mcp-initialize.sh
 ./tests/test-mcp-tools-list.sh
 ./tests/test-run.sh
 ```
 
-### 2. ドキュメント更新
+### 2. Updating documentation
 
-- README.md の使用例更新
-- CLAUDE.md の開発ガイド更新
-- コメントとドキュメンテーション
+- Update the usage examples in README.md
+- Update the development guide in CLAUDE.md
+- Comments and documentation
 
-### 3. 依存関係管理
+### 3. Dependency management
 
 ```bash
-# 新しい依存関係の追加
+# Add a new dependency
 uv add <package_name>
 
-# 開発依存関係の追加
+# Add a development dependency
 uv add --dev <package_name>
 
-# ロックファイルの更新
+# Update the lock file
 uv lock
 
-# 同期
+# Sync
 uv sync
 ```
 
-## セキュリティ考慮事項
+## Security Considerations
 
-### 1. API キー管理
+### 1. API key management
 
-- `.env` ファイルを `.gitignore` に追加
-- 環境変数での API キー管理
-- ログにシークレット情報を出力しない
+- Add the `.env` file to `.gitignore`
+- Manage API keys through environment variables
+- Do not write secret information to logs
 
-### 2. ブラウザセキュリティ
+### 2. Browser security
 
-- デバッグポートへの外部アクセス制限
-- 信頼できないサイトへのアクセス制御
-- サンドボックス環境での実行推奨
+- Restrict external access to the debugging port
+- Control access to untrusted sites
+- Running in a sandboxed environment is recommended
 
-### 3. 入力検証
+### 3. Input validation
 
-- Pydantic Field による厳密な入力バリデーション
-- SQLインジェクション等の脆弱性対策
-- 悪意のあるスクリプト実行の防止
+- Strict input validation with Pydantic Field
+- Countermeasures against vulnerabilities such as SQL injection
+- Prevent execution of malicious scripts
 
-## トラブルシューティング
+## Troubleshooting
 
-### 開発環境
+### Development environment
 
-- Python バージョン確認: 3.12+
-- Chrome バージョン確認: 最新版推奨
-- ポート競合確認: 9222 が空いていること
+- Check the Python version: 3.12+
+- Check the Chrome version: the latest version is recommended
+- Check for port conflicts: 9222 must be free
 
-### 本番環境
+### Production environment
 
-- ログファイルの容量監視
-- メモリ使用量の監視
-- Chrome プロセスの安定性確認
+- Monitor the log file size
+- Monitor memory usage
+- Check the stability of the Chrome process
 
-このガイドを参考に、安全で効率的な開発を行ってください。
+Use this guide for safe and efficient development.
